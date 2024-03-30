@@ -1,0 +1,5 @@
+v1.0: (not ready even for beta)
+	initial release
+	TODO: update tailscale from latest stable build
+	TODO: find a way to patch PageSettingsGeneral - conlicts with ShutdownMonitor
+	TODO: shutting down Ta...-control does NOT stop ...-backend

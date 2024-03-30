@@ -1,0 +1,8 @@
+#!/bin/sh
+#
+# this service runs TailscaleGX-control.py
+# which provides the user interface for controlling tailscale
+
+exec 2>&1
+
+exec /data/TailscaleGX/TailscaleGX-control.py

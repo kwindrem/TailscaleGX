@@ -1,0 +1,10 @@
+#!/bin/sh
+#
+# this service runs tailscaled which provides actual tailscale connection
+#
+# TailscaleGX-control.py starts and stops this service
+
+exec 2>&1
+
+exec /data/TailscaleGX/tailscaled -no-logs-no-support -statedir /data/setupOptions/TailScaleGX/state
+

@@ -1,0 +1,32 @@
+#!/bin/bash
+
+# script to build tailscale.combined extra-small executable extra-small
+#	for Linux/ARM suitable for Venus OS
+#
+# tailscale repo is expected in ../tailscale
+#
+# result is placed in the current directory
+
+GOOS=linux
+export GOOS
+GOARCH=arm
+export GOARCH
+
+targetDir=$( echo $PWD )
+
+sourceDir=$targetDir/../tailscale
+
+targetFile=tailscale.combined
+targetPath="$targetDir/$targetFile"
+
+rm -f $targetFile
+
+cd $sourceDir
+./build_dist.sh --extra-small -o $targetPath -tags ts_include_cli ./cmd/tailscaled
+
+cd $targetDir
+
+# create links so executable will run as the control or daemon
+ln -sf ./tailscale.combined tailscale
+ln -sf ./tailscale.combined tailscaled
+
