@@ -1,13 +1,13 @@
---- /Users/Kevin/GitHub/TailscaleGX.copy/FileSets/PatchSource/PageSettingsGeneral.qml.source	2024-02-20 09:46:56
-+++ /Users/Kevin/GitHub/TailscaleGX.copy/FileSets/PatchSource/PageSettingsGeneral.qml.edited	2024-03-22 11:44:03
+--- /Users/Kevin/GitHub/TailscaleGX.copy/FileSets/PatchSource/PageSettingsGeneral.qml-1.orig	2024-02-20 09:46:56
++++ /Users/Kevin/GitHub/TailscaleGX.copy/FileSets/PatchSource/PageSettingsGeneral.qml-1	2024-03-29 18:10:29
 @@ -80,6 +80,13 @@
  			show: remoteSupportOnOff.item.value
  		}
  
-+////// added for remote connections
++////// added for tailscale remote connections
 +		MbSubMenu
 +		{
-+			description: qsTr("Remote access")
++			description: qsTr("Remote access via tailscale")
 +			subpage: Component { PageSettingsTailscaleGX {} }
 +		}
 +

@@ -1,85 +1,92 @@
 # TailscaleGX
 
 NOTE: this package is still in beta and may contain bugs.
-Please isntall on GX devices that you has native ssh access set up so that you can recover should there be a problem
+Please install on GX devices that you has native ssh access set up so that you can recover should there be a problem
 ssh access also allows getting to logs which is essential to track down bugs.
 
 This package is a user interface for tailscale on Victron Energy GX devices.
 
-tailscale provices is a VPN-like connection for virtually any device.
+tailscale provides is a VPN-like connection for virtually any device.
 
 Victron VRM provides access to the GX device's GUI,
 but not a command line interface to the GX devie.
-TailscaleGX provides an ssh connection and also http access to all the GUIs available on the GX device.
+TailscaleGX provides an ssh connection and also http access to all the GUIs available on the GX device
+Any web browser or ssh tool (ssh, scp, rsync, etc.) can be used to communicate with the GX device.
+However a tailscale account is required and the tailscale app must be installed on the computer,
+tablet or smart phone connecting to the GX device.
 
-Please visit:
+The GX device must also be logged in to the SAME tailscale account.
 
-https://tailscale.com
-
-to learn more about tailscale and to set up an account.
-
-There is also more information in the TailscaleReadMe.md file included in this package.
-
-A tailscale account is required to complete the connection
-While you are free to used your favorite web browser or ssh tool (ssh, scp, rsync, etc.)
-you need to be logged into your tailscale account on the device requesting the connection
-to the GX device. 
-
-You will need a tailscale account and tailscale client software
-running on any device you wish to connect to the GX device.
-Clients are available for Windows, Mac OS, iOS, Linux and Android.
+tailscale clients are available for Windows, Mac OS, iOS, Linux and Android.
 
 TailscaleGX is on GitHub at https://github.com/kwindrem/TailscaleGX
 
+And more information is available at:
+
+https://tailscale.com
+
+TailscaleReadMe.md file is also included in this package.
 
 
 # Using
 
 After installing TailscaleGX,
-navigate to the Settings / General / Remote Access menu
-and turn on Enable remote connection.
+navigate to __Settings / General / Remote access via tailscale__
+
+and turn on __Allow remote connections__
 
 After tailscale starts up you will be presented a message reading:
-:connect this GX devices to your account at:
-and a URL: https://login.tailscale.com/x/xxxxxxxxxxxxx
-the part after tailscale.com will be different.
+
+>__connect this GX devices to your account at:__
+
+>__https://login.tailscale.com/x/xxxxxxxxxxxxx__
 
 On a computer, tablet or smart phone with the tailscale app installed,
 enter the URL exactly as it is shown on the screen.
 
-You will be asked to verify your login, then a Connect button will be shown.
+You will be asked login to your tailscale account.
 
-Tap on that.
+Press the __Connect__ button.
 
-On the GX devive, the message shoudl change to:
+On the GX devive, the message should change to:
 
-accepting remote connections at:
+>__accepting remote connections at:__
 
-followed by an IP V4 and IP V6 address
+>__xxx.xxx.xxx.xxx__
 
-You can then connect in to the GX device from any computer, etc logged in to the tailscale account you had active
-when you followed the URL. 
+>__xxxx:xxxx:xxxx::xxxx:xxxx__
 
-You can use any unix shell for ssh, scp, etc or any web browser,
+(IPv4 and IPv6 addresses)
+
+You can then connect to the GX device from any computer, etc logged in to your tailscale account. 
+
+Any tool for ssh, scp, etc or any web browser should work,
 however you must have the tailscale app enabled and logged in to your account.
 
-You can disable tailscale by turning Enable remote connection off. 
-
-When you turn it on again you will be reconnected to tailscale
-with the same IP addresses presented initially.
+You can disable tailscale by turning __Allow remote connections__ off. 
+Turning it on again you will reconnect to tailscale without logging in again.
+The same IP addresses will be used until you logout the GX device.
 
 If you wish to disconnect the GX device from the existing tailscale account,
-press the Logout button. You can then log into a different account.
+press the __Logout__ button. You can then log into a different account.
 
 # Installing
 
-TailscaleGX can be installed from Package manager:
+TailscaleGX can be installed from Package manager.
 
-Go to inactive packages and if TailscaleGX is not in the list
-select new to add it manually:
+In __Inactive packages__
+
+If TailscaleGX is already in the list, select it and tap __Proceed__
+
+If not in the list, select __new__ and fill in the details:
+
 Packagename: TailscaleGX
+
 GitHub user: kwindrem
+
 GitHub branch or tag: latest
+
+then tap __Proceed__
 
 # Security
 
@@ -89,14 +96,26 @@ to tailscale can access the GX device.
 
 There is information on the tailscale web site that discusses the security issues.
 
-The GX device will not allow tailscale connections when Enable remote access is turned off.
+The GX device will not allow tailscale connections
+when __Allow remote connections__ is turned off.
 
-# tailscale details
+# TailscaleGX details
 
-tailscale was built from v1.62.1, the most recent stable build at the time,
-rather than using an available binary in order to save space.
+The tailscale included in TailscaleGX is an "extra-small" build of v1.62.1.
+This build is about 25 MB compared to about 50 MB for the pre-built binairies.
 
-tailscale runs as both a daemon and a control appliciton, in this case
-a command line interface.
+tailscale runs as a daemon (tailscaled). 
 
-The daemon only runs when Enable remote connection is turned on.
+In Venus OS, tailscaled is run as a daemontools service: __TailscaleGX-backend__
+
+In addition a command-line application (tailscale) controls tailscaled.
+
+The daemon only runs when __Allow remote connections__ is turned on.
+
+A second service __TailscaleGX-control__:
+
+- starts and stops TailscaleGX-backend
+- manages bringing up the GX to tailscale server link
+- collects login and connection status from tailscale
+- provides this status to the GUI
+- prompts the user for necessary steps to establish a connection

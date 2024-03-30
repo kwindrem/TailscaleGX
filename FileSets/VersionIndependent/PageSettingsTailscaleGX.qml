@@ -10,7 +10,7 @@ MbPage
 	property string settingsPrefix: "com.victronenergy.settings/Settings/TailscaleGX"
 
 	id: root
-	title: qsTr("Tailscale GX control")
+	title: qsTr("Remote access (tailscale) setup")
 	VBusItem { id: stateItem; bind: Utils.path(servicePrefix, "/State") }
 	VBusItem { id: loginItem; bind: Utils.path(servicePrefix, "/LoginLink") }
 	VBusItem { id: ipV4Item; bind: Utils.path(servicePrefix, "/IPv4") }
@@ -32,7 +32,7 @@ MbPage
 		if ( ! isRunning )
 			return qsTr ( "TailscaleGX control not running" )
 		else if ( ! isEnabled )
-			return qsTr ( "not enabled" )
+			return qsTr ( "remote connections not accepted\n (disabled above)" )
 		else if ( isConnected )
 			return ( qsTr ( "accepting remote connections at:\n\n")
 					+ ipV4 + "\n" + ipV6 )
@@ -41,13 +41,13 @@ MbPage
 		else if ( connectState == 1 )
 			return qsTr ("starting ...")
 		else if ( connectState == 2 || connectState == 3)
-			return qsTr ("tailscale not running")
+			return qsTr ("tailscale starting ...")
 		else if ( connectState == 4)
-			return qsTr ("tailscale logged out")
+			return qsTr ("this GX device is logged out of tailscale")
 		else if ( connectState == 5)
 			return qsTr ("waiting for a response from tailscale ...")
 		else if ( connectState == 6)
-			return ( qsTr ("connect this GX device to your account at:\n\n") + loginLink )
+			return ( qsTr ("connect this GX device to your tailscale account at:\n\n") + loginLink )
 		else
 			return ( qsTr ( "unknown state " ) + connectState )
 	}
@@ -63,7 +63,7 @@ MbPage
 		MbSwitch
 		{
 			id: enable
-			name: qsTr("Enable remote connection")
+			name: qsTr("Allow remote connections")
 			bind: Utils.path( settingsPrefix, "/Enabled")
 			writeAccessLevel: User.AccessInstaller
 			show: isRunning

@@ -80,10 +80,10 @@ MbPage
 			show: remoteSupportOnOff.item.value
 		}
 
-////// added for remote connections
+////// added for tailscale remote connections
 		MbSubMenu
 		{
-			description: qsTr("Remote access")
+			description: qsTr("Remote access via tailscale")
 			subpage: Component { PageSettingsTailscaleGX {} }
 		}
 
