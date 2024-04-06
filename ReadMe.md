@@ -1,9 +1,5 @@
 # TailscaleGX
 
-NOTE: this package is still in beta and may contain bugs.
-Please install on GX devices that you has native ssh access set up so that you can recover should there be a problem
-ssh access also allows getting to logs which is essential to track down bugs.
-
 This package is a user interface for tailscale on Victron Energy GX devices.
 
 tailscale provides is a VPN-like connection for virtually any device.
@@ -29,6 +25,12 @@ TailscaleReadMe.md file is also included in this package.
 
 
 # Using
+
+ssh access must be enabled in Settings / General, and a root password set
+or any ssh tool will not be able to access the GX device.
+To do this refer to:
+
+https://www.victronenergy.com/live/ccgx:root_access
 
 After installing TailscaleGX,
 navigate to __Settings / General / Remote access via tailscale__
