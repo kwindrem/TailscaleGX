@@ -15,12 +15,14 @@ MbPage
 	VBusItem { id: loginItem; bind: Utils.path(servicePrefix, "/LoginLink") }
 	VBusItem { id: ipV4Item; bind: Utils.path(servicePrefix, "/IPv4") }
 	VBusItem { id: ipV6Item; bind: Utils.path(servicePrefix, "/IPv6") }
+	VBusItem { id: hostNameItem; bind: Utils.path(servicePrefix, "/HostName") }
 	VBusItem { id: commandItem; bind: Utils.path(servicePrefix, "/GuiCommand") }
 	VBusItem { id: enabledItem; bind: Utils.path(settingsPrefix, "/Enabled") }
 
 	property int connectState: stateItem.valid ? stateItem.value : 0
 	property string ipV4: ipV4Item.valid ? ipV4Item.value : ""
 	property string ipV6: ipV6Item.valid ? ipV6Item.value : ""
+	property string hostName: hostNameItem.valid ? hostNameItem.value : ""
 	property string loginLink: loginItem.valid ? loginItem.value : ""
 	
 	property bool isRunning: stateItem.valid
@@ -34,8 +36,8 @@ MbPage
 		else if ( ! isEnabled )
 			return qsTr ( "remote connections not accepted\n (disabled above)" )
 		else if ( isConnected )
-			return ( qsTr ( "accepting remote connections at:\n\n")
-					+ ipV4 + "\n" + ipV6 )
+			return ( qsTr ( "accepting remote connections at:\n")
+					+ hostName + "\n" + ipV4 + "\n" + ipV6 )
 		else if ( connectState == 0 )
 			return ""
 		else if ( connectState == 1 )

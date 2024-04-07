@@ -22,6 +22,7 @@
 #		/State
 #		/IPv4		IP v4 remote access IP address
 #		/IPv6		as above for IP v6
+#		/HostName	as above but as a host name
 #		/LoginLink	temorary URL for connecting to tailscale
 #						for initiating a connection
 #		/GuiCommand	GUI writes string here to request an action:
@@ -110,30 +111,55 @@ CONNECTED = 100
 
 global previousState
 global state
-global gxNameObj
+global systemNameObj
+global systemName
+global hostName
+global ipV4
 
 previousState = UNKNOWN_STATE
 state = UNKNOWN_STATE
-gxNameObj = None
+systemNameObj = None
+systemName = None
+hostName = None
+ipV4 = ""
 
 def mainLoop ():
 	global DbusSettings
 	global DbusService
 	global previousState
 	global state
+	global systemName
+	global hostName
+	global ipV4
+
 	startTime = time.time ()
 
 	backendRunning = None
 	tailscaleEnabled = False
+	thisHostName = None
 
 	loginInfo = ""
 
-	if gxNameObj != None:
-		temp = gxNameObj.GetValue ()
-		# replace invalid characters with '-'
-		gxName = re.sub("[!@#$%^&*()\[\]{};:,./<>?\|`~=_+ ]", "-", temp).replace ('\\', '-')
+	if systemNameObj == None:
+		systemName = None
+		hostName = None
 	else:
-		gxName = None
+		name = systemNameObj.GetValue ()
+		if name != systemName:
+			systemName = name
+			if name == None or name == "":
+				hostName = None
+				logging.warning ("no system name so no host name" )
+			else:
+				# some characters permitted for the GX system name aren't valid as a URL name
+				# so replace them with '-'
+				name = re.sub("[!@#$%^&*()\[\]{};:,./<>?\|`'~=_+ ]", "-", name)
+				name = name.replace ('\\', '-')
+				# host name must start with a letter or number
+				name = name.strip(' -').lower ()
+				hostName = name
+				logging.info ("system name changed to " + systemName)
+				logging.info ("new host name " + hostName + " will be used on NEXT login" )
 
 	# see if backend is running
 	stdout, stderr, exitCode = sendCommand ( [ 'svstat', "/service/TailscaleGX-backend" ] )
@@ -205,6 +231,12 @@ def mainLoop ():
 				state = LOGGED_OUT
 		elif exitCode == 0:
 			state = CONNECTED
+			# extract this host's name from status message
+			if ipV4 != "":
+				for line in stdout.splitlines ():
+					if ipV4 in line:
+							thisHostName = line.split()[1]
+
 		# don't update state if we don't recognize the response
 		else:
 			pass
@@ -220,25 +252,28 @@ def mainLoop ():
 		#	(status not included)
 		if state != previousState:
 			if state == STOPPED and previousState != WAIT_FOR_RESPONSE:
-				logging.info ("starting tailscale")
-				if gxName == None or gxName == "":
+				if systemName == None or systemName == "":
+					logging.info ("starting tailscale without host name")
 					_, stderr, exitCode = sendCommand ( [ tsControlCmd, 'up',
 								'--timeout=0.1s' ] )
 				else:
+					logging.info ("starting tailscale with host name:" + hostName)
 					_, stderr, exitCode = sendCommand ( [ tsControlCmd, 'up',
-								'--timeout=0.1s', '--hostname=' + gxName ] )
+								'--timeout=0.1s', '--hostname=' + hostName ] )
 				if exitCode != 0:
 					logging.error ( "tailscale up failed " + str (exitCode) )
 					logging.error (stderr)
 				else:
 					state = WAIT_FOR_RESPONSE
 			elif state == LOGGED_OUT and previousState != WAIT_FOR_RESPONSE:
-				logging.info ("logging in to tailscale")
-				if gxName == None or gxName == "":
+				if systemName == None or systemName == "":
+					logging.info ("logging in to tailscale without host name")
 					_, stderr, exitCode = sendCommand ( [ tsControlCmd, 'login',
 								'--timeout=0.1s' ], )
 				else:
-					_, stderr, exitCode = sendCommand ( [ tsControlCmd, 'login', '--timeout=0.1s', '--hostname=' + gxName ] )
+					logging.info ("logging in to tailscale with host name:" + hostName)
+					_, stderr, exitCode = sendCommand ( [ tsControlCmd, 'login', 
+								'--timeout=0.1s', '--hostname=' + hostName ] )
 				if exitCode != 0:
 					logging.error ( "tailscale login failed " + str (exitCode) )
 					logging.error (stderr)
@@ -260,9 +295,11 @@ def mainLoop ():
 			else:
 				DbusService['/IPv4'] = "?"
 				DbusService['/IPv6'] = "?"
+			DbusService['/HostName'] = thisHostName
 		else:
 			DbusService['/IPv4'] = ""
 			DbusService['/IPv6'] = ""
+			DbusService['/HostName'] = ""
 
 	else:
 		state = NOT_RUNNING
@@ -280,7 +317,7 @@ def mainLoop ():
 def main():
 	global DbusSettings
 	global DbusService
-	global gxNameObj
+	global systemNameObj
 
 	# fetch installed version
 	installedVersionFile = "/etc/venus/installedVersion-TailscaleGX-control"
@@ -324,11 +361,12 @@ def main():
 	DbusService.add_path ( '/State', "" )
 	DbusService.add_path ( '/IPv4', "" )
 	DbusService.add_path ( '/IPv6', "" )
+	DbusService.add_path ( '/HostName', "" )
 	DbusService.add_path ( '/LoginLink', "" )
 
 	DbusService.add_path ( '/GuiCommand', "", writeable = True )
 
-	gxNameObj = theBus.get_object (dbusSettingsPath, "/Settings/SystemSetup/SystemName")
+	systemNameObj = theBus.get_object (dbusSettingsPath, "/Settings/SystemSetup/SystemName")
 
 
 	# call the main loop - every 1 second

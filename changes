@@ -1,2 +1,7 @@
+v1.1:
+	fixed: some GX names don't translate to valid URL names
+		which results in a host name of 'custom' in admin console
+	added host name to accepting connections at ...
+
 v1.0:
 	initial release
