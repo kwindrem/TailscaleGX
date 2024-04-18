@@ -1,5 +1,5 @@
---- /Users/Kevin/GitHub/TailscaleGX.copy/FileSets/PatchSource/PageSettingsGeneral.qml-1.orig	2024-02-20 09:46:56
-+++ /Users/Kevin/GitHub/TailscaleGX.copy/FileSets/PatchSource/PageSettingsGeneral.qml-1	2024-03-29 18:10:29
+--- /Users/Kevin/GitHub/TailscaleGX.copy/FileSets/PatchSource/PageSettingsGeneral.qml.orig	2024-04-06 10:27:01
++++ /Users/Kevin/GitHub/TailscaleGX.copy/FileSets/PatchSource/PageSettingsGeneral.qml	2024-04-06 10:27:01
 @@ -80,6 +80,13 @@
  			show: remoteSupportOnOff.item.value
  		}

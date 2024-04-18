@@ -103,7 +103,7 @@ when __Allow remote connections__ is turned off.
 
 # TailscaleGX details
 
-The tailscale included in TailscaleGX is an "extra-small" build of v1.62.1.
+The tailscale included in TailscaleGX is an "extra-small" build of v1.64.2.
 This build is about 25 MB compared to about 50 MB for the pre-built binairies.
 
 tailscale runs as a daemon (tailscaled). 
