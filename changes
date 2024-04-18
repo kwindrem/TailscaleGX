@@ -1,8 +1,11 @@
+v1.2:
+	update to tailscale 1.64.2
+
+
 v1.1:
 	fixed: some GX names don't translate to valid URL names
 		which results in a host name of 'custom' in admin console
 	added host name to accepting connections at ...
-	update to tailscale 1.64.2
 
 v1.0:
 	initial release
