@@ -1,3 +1,7 @@
+v1.4:
+	update tailscale to v1.66
+	remove local copy of HelperResources
+
 v1.2/v1.3:
 	update to tailscale 1.64.2
 

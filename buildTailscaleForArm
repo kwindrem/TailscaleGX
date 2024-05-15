@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# script to build tailscale.combined extra-small executable extra-small
+# script to build tailscale.combined extra-small executable
 #	for Linux/ARM suitable for Venus OS
 #
 # tailscale repo is expected in ../tailscale
@@ -12,9 +12,8 @@ export GOOS
 GOARCH=arm
 export GOARCH
 
-targetDir=$( echo $PWD )
-
-sourceDir=$targetDir/../tailscale
+targetDir="/users/Kevin/GitHub/TailscaleGX"
+sourceDir="/users/Kevin/GitHub/tailscale"
 
 targetFile=tailscale.combined
 targetPath="$targetDir/$targetFile"
