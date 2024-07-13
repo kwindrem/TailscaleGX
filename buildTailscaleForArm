@@ -3,8 +3,6 @@
 # script to build tailscale.combined extra-small executable
 #	for Linux/ARM suitable for Venus OS
 #
-# tailscale repo is expected in ../tailscale
-#
 # result is placed in the current directory
 
 GOOS=linux

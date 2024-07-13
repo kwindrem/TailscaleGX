@@ -1,3 +1,7 @@
+v1.5:
+	update to tailscale v1.68
+	use velib_python to the one in SetupHelper (if it exists)
+
 v1.4:
 	update tailscale to v1.66
 	remove local copy of HelperResources
