@@ -1,3 +1,7 @@
+v1.6:
+	dropping support for firmware earlier than v3.10
+	moved velib_python in SetupHelper to a single version
+
 v1.5:
 	update to tailscale v1.68
 	use velib_python to the one in SetupHelper (if it exists)

@@ -23,6 +23,12 @@ https://tailscale.com
 
 TailscaleReadMe.md file is also included in this package.
 
+# NOTE
+Support for firmware prior to v3.10 has been dropped starting with TailScaleGX v1.6
+
+If you are running older versions, change the branch/tag to preV3.10support
+	for any packages you wish to run on that firmware
+
 
 # Using
 
