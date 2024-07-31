@@ -18,6 +18,7 @@ MbPage
 	VBusItem { id: hostNameItem; bind: Utils.path(servicePrefix, "/HostName") }
 	VBusItem { id: commandItem; bind: Utils.path(servicePrefix, "/GuiCommand") }
 	VBusItem { id: enabledItem; bind: Utils.path(settingsPrefix, "/Enabled") }
+	VBusItem { id: ipForwardingItem; bind: Utils.path(settingsPrefix, "/IpForwarding") }
 
 	property int connectState: stateItem.valid ? stateItem.value : 0
 	property string ipV4: ipV4Item.valid ? ipV4Item.value : ""
@@ -56,19 +57,21 @@ MbPage
 
     model: VisibleItemModel
 	{
-		MbItemText
-		{
-			text: qsTr("secure remote access to GX device via tailscale")
-			wrapMode: Text.WordWrap
-			horizontalAlignment: Text.AlignHCenter
-		}
 		MbSwitch
 		{
 			id: enable
-			name: qsTr("Allow remote connections")
+			name: qsTr("Allow secure remote connections via tailscale")
 			bind: Utils.path( settingsPrefix, "/Enabled")
 			writeAccessLevel: User.AccessInstaller
 			show: isRunning
+		}
+		MbSwitch
+		{
+			id: ipForwardEnable
+			name: qsTr("IP forwarding")
+			bind: Utils.path( settingsPrefix, "/IpForwarding")
+			writeAccessLevel: User.AccessInstaller
+			show: isEnabled
 		}
 		MbItemText
 		{

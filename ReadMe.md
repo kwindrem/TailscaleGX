@@ -78,6 +78,14 @@ The same IP addresses will be used until you logout the GX device.
 If you wish to disconnect the GX device from the existing tailscale account,
 press the __Logout__ button. You can then log into a different account.
 
+# IP Forwarding
+
+You may optionally share the tailnet connection with other devices on your local network.
+
+To do so, turn on IP forwarding in the Tailscale GX setup menu.
+
+Note that IP forwarding will impact CPU performance so use with caution.
+
 # Installing
 
 TailscaleGX can be installed from Package manager.
@@ -109,7 +117,7 @@ when __Allow remote connections__ is turned off.
 
 # TailscaleGX details
 
-The tailscale included in TailscaleGX is an "extra-small" build of v1.64.2.
+The tailscale included in TailscaleGX is an "extra-small" build of v1.70.
 This build is about 25 MB compared to about 50 MB for the pre-built binairies.
 
 tailscale runs as a daemon (tailscaled). 

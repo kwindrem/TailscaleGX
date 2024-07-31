@@ -16,6 +16,8 @@
 #	com.victronenergy.Settings parameters:
 #		/Settings/TailscaleGX/Enabled
 #			controls wheter remote access is enabled or disabled
+#		/Settings/TailscaleGX/IpForwarding
+#			controls whether the GX device is set to forward IP traffic to other nodes
 #
 # Operational parameters are provided by:
 #	com.victronenergy.tailscaleGX
@@ -33,10 +35,8 @@
 # On startup the dbus settings and service are created
 #	control then passes to mainLoop which gets scheduled once per second:
 #		starts / stops the TailscaleGX-backend based on /Enabled
+#			IP forwarding is also set during starting and stopping
 #		scans status from tailscale link
-#		TBD
-#		TBD
-#		TBD
 #		provides status and prompting to the GUI during this process
 #			in the end providing the user the IP address they must use
 #			to connect to the GX device.
@@ -104,6 +104,7 @@ global systemNameObj
 global systemName
 global hostName
 global ipV4
+global lastIpForwardingEnabled
 
 previousState = UNKNOWN_STATE
 state = UNKNOWN_STATE
@@ -111,6 +112,7 @@ systemNameObj = None
 systemName = None
 hostName = None
 ipV4 = ""
+lastIpForwardingEnabled = False
 
 def mainLoop ():
 	global DbusSettings
@@ -120,11 +122,13 @@ def mainLoop ():
 	global systemName
 	global hostName
 	global ipV4
+	global lastIpForwardingEnabled
 
 	startTime = time.time ()
 
 	backendRunning = None
 	tailscaleEnabled = False
+	ipForwardingEnabled = False
 	thisHostName = None
 
 	loginInfo = ""
@@ -164,6 +168,31 @@ def mainLoop ():
 		backendRunning = False
 
 	tailscaleEnabled = DbusSettings ['enabled'] == 1
+	if tailscaleEnabled and state == CONNECTED:
+		ipForwardingEnabled = DbusSettings ['ipForwarding'] == 1
+	else:
+		ipForwardingEnabled = False
+
+	# update IP forwarding and exit-node enable
+	if ipForwardingEnabled != lastIpForwardingEnabled:
+		lastIpForwardingEnabled = ipForwardingEnabled
+		if ipForwardingEnabled:
+			logging.info ("IP forwarding enabled")
+			enabled = '1'
+			enabled2 = "true"
+		else:
+			logging.info ("IP forwarding disabled")
+			enabled = '0'
+			enabled2 = "false"
+		_, _, exitCode = sendCommand ( [ 'sysctl', '-w', "net.ipv4.ip_forward=" + enabled ] )
+		if exitCode != 0:
+			logging.error ( "could not change IP v4 forwarding state to " + enabled + " " + str (exitCode) )
+		_, _, exitCode = sendCommand ( [ 'sysctl', '-w', "net.ipv6.conf.all.forwarding=" + enabled ] )
+		if exitCode != 0:
+			logging.error ( "could not change IP v6 forwarding state to " + enabled + " " + str (exitCode) )
+		_, _, exitCode = sendCommand ( [ tsControlCmd, 'set', "--advertise-exit-node=" + enabled2 ] )
+		if exitCode != 0:
+			logging.error ( "could not change tailscale exit-node setting to " + enabled2 + " " + str (exitCode) )
 
 	# start backend
 	if tailscaleEnabled and backendRunning == False:
@@ -333,7 +362,9 @@ def main():
 	theBus = dbus.SystemBus()
 	dbusSettingsPath = "com.victronenergy.settings"
 
-	settingsList = {'enabled': [ '/Settings/TailscaleGX/Enabled', 0, 0, 1 ] }
+	settingsList =	{ 'enabled': [ '/Settings/TailscaleGX/Enabled', 0, 0, 1 ],
+					  'ipForwarding': [ '/Settings/TailscaleGX/IpForwarding', 0, 0, 1 ]
+					}
 	DbusSettings = SettingsDevice(bus=theBus, supportedSettings=settingsList,
 					timeout = 30, eventCallback=None )
 
