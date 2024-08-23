@@ -1,3 +1,8 @@
+v1.9:
+	switch to stock tailscale settings and state values
+		eventually tailscale will be included in Venus OS
+		and TailscaleGX will be obsolete and will not run to avoid conflicts
+
 v1.7/1.8:
 	add IP forwarding when tailscale is enabled
 	update to tailscale v1.70

@@ -6,5 +6,5 @@
 
 exec 2>&1
 
-exec /data/TailscaleGX/tailscaled -no-logs-no-support -statedir /data/setupOptions/TailscaleGX/state
+exec /data/TailscaleGX/tailscaled -no-logs-no-support -statedir /data/conf/tailscale
 

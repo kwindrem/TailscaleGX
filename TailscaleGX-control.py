@@ -41,6 +41,8 @@
 #			in the end providing the user the IP address they must use
 #			to connect to the GX device.
 #
+# Note: tailscale will be integrated into stock firmware
+#	when this happens, TailscaleGX will not run
 
 import platform
 import argparse
@@ -169,9 +171,9 @@ def mainLoop ():
 
 	tailscaleEnabled = DbusSettings ['enabled'] == 1
 	if tailscaleEnabled and state == CONNECTED:
-		ipForwardingEnabled = DbusSettings ['ipForwarding'] == 1
+		ipForwardingEnabled = DbusSettings ['customArguements'] == "--advertise-exit-node=true"
 	else:
-		ipForwardingEnabled = False
+		ipForwardingEnabled = ""
 
 	# update IP forwarding and exit-node enable
 	if ipForwardingEnabled != lastIpForwardingEnabled:
@@ -338,17 +340,17 @@ def main():
 	global systemNameObj
 
 	# fetch installed version
-	installedVersionFile = "/etc/venus/installedVersion-TailscaleGX-control"
+	installedVersionFile = "/etc/venus/installedVersion-TailscaleGX"
 	try:
 		versionFile = open (installedVersionFile, 'r')
 	except:
-		installedVersion = ""
+		installedVersion = "(version unknown)"
 	else:
 		installedVersion = versionFile.readline().strip()
 		versionFile.close()
 		# if file is empty, an unknown version is installed
 		if installedVersion ==  "":
-			installedVersion = "unknown"
+			installedVersion = "(version unknown)"
 
 	# set logging level to include info level entries
 	logging.basicConfig( format='%(levelname)s:%(message)s', level=logging.INFO )
@@ -362,11 +364,49 @@ def main():
 	theBus = dbus.SystemBus()
 	dbusSettingsPath = "com.victronenergy.settings"
 
-	settingsList =	{ 'enabled': [ '/Settings/TailscaleGX/Enabled', 0, 0, 1 ],
-					  'ipForwarding': [ '/Settings/TailscaleGX/IpForwarding', 0, 0, 1 ]
+	settingsList =	{ 'enabled': [ '/Settings/Services/Tailscale/Enabled', 0, 0, 1 ],
+					  'customArguements': [ '/Settings/Services/Tailscale/CustomArguments', "", 0, 0 ]
 					}
 	DbusSettings = SettingsDevice(bus=theBus, supportedSettings=settingsList,
 					timeout = 30, eventCallback=None )
+
+	# migrate settings and tailscale state directory
+	removeSettings = False
+	try:
+		oldSettingObj = theBus.get_object (dbusSettingsPath, "/Settings/TailscaleGX/Enabled")
+		oldSetting=oldSettingObj.GetValue()
+		logging.warning ( "moving enabled setting to new location and removing old loction" )
+		DbusSettings['enabled'] = oldSetting
+		removeSettings = True
+	except:
+		pass
+	try:
+		oldSettingObj = theBus.get_object (dbusSettingsPath, "/Settings/TailscaleGX/IpForwarding")
+		oldSetting=oldSettingObj.GetValue()
+		logging.warning ( "moving IP forwarding setting to new location and removing old loction" )
+		if oldSetting:
+			DbusSettings['customArguements'] = "--advertise-exit-node=true"
+		else:
+			DbusSettings['customArguements'] = ""
+		removeSettings = True
+	except:
+		pass
+
+	# remove old settings
+	if removeSettings:
+		settingsToRemove = '%[ "' + "/Settings/TailscaleGX/Enabled" + '" , "' + "/Settings/TailscaleGX/IpForwarding" + '" ]'
+		sendCommand ( ['dbus', '-y', 'com.victronenergy.settings', '/', 'RemoveSettings', settingsToRemove  ] )
+
+	stockTailscaleStateDir = "/data/conf/tailscale"
+	oldStateDir = "/data/setupOptions/TailscaleGX/state"
+	if os.path.exists ( oldStateDir ) and not os.path.exists ( stockTailscaleStateDir ):
+		logging.warning ( "moving tailscale state to new location" )
+		shutil.move ( oldStateDir, stockTailscaleStateDir )
+
+	if os.path.exists ("/opt/victronenergy/tailscale"):
+		logging.warning ("tailscale is now part of stock firmware - TailscaleGX-control no longer used - exiting")
+		sendCommand ( [ 'svc', '-d' , "/service/TailscaleGX-control" ] )
+		exit ()
 
 	DbusService = VeDbusService ('com.victronenergy.tailscaleGX', bus = dbus.SystemBus(), register=False)
 	DbusService.add_mandatory_paths (
@@ -387,7 +427,6 @@ def main():
 
 
 	systemNameObj = theBus.get_object (dbusSettingsPath, "/Settings/SystemSetup/SystemName")
-
 
 	# call the main loop - every 1 second
 	# this section of code loops until mainloop quits

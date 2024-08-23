@@ -5,10 +5,22 @@
 # provides secure access to a GX device from any remote location
 # via tailscale and WireGard
 
-standardPromptAndActions='yes'
+# Note: Venus OS is being updated to include tailscale
+#	when this happens, code below will prevent TailscaleGX from installing
+#	or will trigger an uninstall if already installed
 
 #### following line incorporates helper resources into this script
 source "/data/SetupHelper/HelperResources/IncludeHelpers"
 #### end of lines to include helper resources
 
+if [ $scriptAction == 'NONE' ] ; then
+	standardActionPrompt
+fi
 
+if [ -e "/opt/victronenergy/tailscale" ]; then
+	if [ "$scriptAction" != "UNINSTALL" ]; then
+		setInstallFailed $EXIT_PACKAGE_CONFLICT "tailscale is now part of stock firmware - TailscaleGX will be can not be installed"
+	fi
+fi
+
+endScript 'INSTALL_FILES' 'INSTALL_SERVICES'

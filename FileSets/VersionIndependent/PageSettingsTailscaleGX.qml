@@ -7,7 +7,7 @@ import com.victron.velib 1.0
 MbPage
 {
 	property string servicePrefix: "com.victronenergy.tailscaleGX"
-	property string settingsPrefix: "com.victronenergy.settings/Settings/TailscaleGX"
+	property string settingsPrefix: "com.victronenergy.settings/Settings/Services/Tailscale"
 
 	id: root
 	title: qsTr("Remote access (tailscale) setup")
@@ -18,7 +18,7 @@ MbPage
 	VBusItem { id: hostNameItem; bind: Utils.path(servicePrefix, "/HostName") }
 	VBusItem { id: commandItem; bind: Utils.path(servicePrefix, "/GuiCommand") }
 	VBusItem { id: enabledItem; bind: Utils.path(settingsPrefix, "/Enabled") }
-	VBusItem { id: ipForwardingItem; bind: Utils.path(settingsPrefix, "/IpForwarding") }
+	VBusItem { id: customArgumentsItem; bind: Utils.path(settingsPrefix, "/CustomArguments") }
 
 	property int connectState: stateItem.valid ? stateItem.value : 0
 	property string ipV4: ipV4Item.valid ? ipV4Item.value : ""
@@ -69,7 +69,9 @@ MbPage
 		{
 			id: ipForwardEnable
 			name: qsTr("IP forwarding")
-			bind: Utils.path( settingsPrefix, "/IpForwarding")
+			bind: Utils.path( settingsPrefix, "/CustomArguments")
+			valueTrue: "--advertise-exit-node=true"
+			valueFalse: ""
 			writeAccessLevel: User.AccessInstaller
 			show: isEnabled
 		}

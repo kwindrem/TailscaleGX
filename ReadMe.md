@@ -24,6 +24,13 @@ https://tailscale.com
 TailscaleReadMe.md file is also included in this package.
 
 # NOTE
+
+tailscale is being added to Venus OS.
+When a stock tailscale is detected, TailscaleGX will not run to avoid conflics
+The firmware version that will include tailscale has not been determined so the normal
+obsolete version mechamism is not used at the moment but will be added when the version is known.
+
+# NOTE
 Support for firmware prior to v3.10 has been dropped starting with TailScaleGX v1.6
 
 If you are running older versions, change the branch/tag to preV3.10support
