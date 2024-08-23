@@ -1,4 +1,4 @@
-v1.9:
+v1.9/1.10:
 	switch to stock tailscale settings and state values
 		eventually tailscale will be included in Venus OS
 		and TailscaleGX will be obsolete and will not run to avoid conflicts

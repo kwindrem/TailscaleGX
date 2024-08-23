@@ -19,7 +19,7 @@ fi
 
 if [ -e "/opt/victronenergy/tailscale" ]; then
 	if [ "$scriptAction" != "UNINSTALL" ]; then
-		setInstallFailed $EXIT_PACKAGE_CONFLICT "tailscale is now part of stock firmware - TailscaleGX will be can not be installed"
+		setInstallFailed $EXIT_PACKAGE_CONFLICT "tailscale is now part of stock firmware - TailscaleGX can not be installed"
 	fi
 fi
 
