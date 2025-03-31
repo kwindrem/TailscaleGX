@@ -1,3 +1,6 @@
+v1.11:
+	update to tailscale v1.82
+
 v1.9/1.10:
 	switch to stock tailscale settings and state values
 		eventually tailscale will be included in Venus OS
