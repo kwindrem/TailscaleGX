@@ -30,6 +30,10 @@ MbPage
 	property bool isEnabled: enable.checked && isRunning
 	property bool isConnected: connectState == 100 && isEnabled
 
+	VBusItem { id: authKeyItem; bind: Utils.path(settingsPrefix, "/AuthKey") }
+	property string authKey: authKeyItem.valid ? authKeyItem.value : ""
+	property string joinedKey: keyPt1.item.value + keyPt2.item.value + keyPt3.item.value
+
 	function getState ()
 	{
 		if ( ! isRunning )
@@ -51,10 +55,12 @@ MbPage
 			return qsTr ("waiting for a response from tailscale ...")
 		else if ( connectState == 6)
 			return ( qsTr ("connect this GX device to your tailscale account at:\n\n") + loginLink )
+		else if ( connectState == 200 )
+			return ( qsTr ("login timeout - check auth key"))
 		else
 			return ( qsTr ( "unknown state " ) + connectState )
 	}
-
+	
     model: VisibleItemModel
 	{
 		MbSwitch
@@ -91,6 +97,38 @@ MbPage
 			writeAccessLevel: User.AccessInstaller
 			show: isConnected
 		}
-	//// add detailed instructions	
+		MbItemText
+		{
+			text: qsTr ("Tailscale authorization key:\n") + joinedKey + qsTr ("\nenter below in up to three parts")
+			wrapMode: Text.WrapAnywhere
+		}
+		
+		MbEditBox
+		{
+			id: keyPt1
+			description: "auth key part 1"
+			showAccessLevel: User.AccessInstaller
+			maximumLength: 25
+			item.value: authKey.substring (0, 25)
+			onEditDone: authKeyItem.setValue (joinedKey)
+		}
+		MbEditBox
+		{
+			id: keyPt2
+			description: "auth key part 2"
+			showAccessLevel: User.AccessInstaller
+			maximumLength: 25
+			item.value: authKey.substring (25, 50)
+			onEditDone: authKeyItem.setValue (joinedKey)
+		}
+		MbEditBox
+		{
+			id: keyPt3
+			description: "auth key part 3"
+			showAccessLevel: User.AccessInstaller
+			maximumLength: 25
+			item.value: authKey.substring (50)
+			onEditDone: authKeyItem.setValue (joinedKey)
+		}
 	}
 }

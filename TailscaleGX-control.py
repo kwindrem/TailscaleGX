@@ -27,6 +27,7 @@
 #		/HostName	as above but as a host name
 #		/LoginLink	temorary URL for connecting to tailscale
 #						for initiating a connection
+#		/AuthKey	tailscale authorization key (optional connection mechanism)
 #		/GuiCommand	GUI writes string here to request an action:
 #			logout
 #
@@ -37,6 +38,7 @@
 #		starts / stops the TailscaleGX-backend based on /Enabled
 #			IP forwarding is also set during starting and stopping
 #		scans status from tailscale link
+#		scans status from tailscale lin
 #		provides status and prompting to the GUI during this process
 #			in the end providing the user the IP address they must use
 #			to connect to the GX device.
@@ -67,10 +69,16 @@ from settingsdevice import SettingsDevice
 #
 # stdout, stderr and the exit code are returned as a list to the caller
 
-def sendCommand ( command=None ):
+def sendCommand ( command=None, hostName=None, authKey=None ):
 	if command == None:
 		logging.error ( "sendCommand: no command specified" )
 		return None, None, None
+
+	if hostName != None and hostName != "":
+		command += [ "--hostname=" + hostName ]
+	if authKey != None and authKey != "":
+		command += [ "--auth-key=" + authKey ]
+
 	try:
 		proc = subprocess.Popen ( command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 	except:
@@ -90,7 +98,7 @@ tsControlCmd = '/data/TailscaleGX/tailscale'
 DbusSettings = None
 DbusService = None
 
-
+# state values
 UNKNOWN_STATE = 0
 BACKEND_STARTING = 1
 NOT_RUNNING = 2
@@ -99,6 +107,7 @@ LOGGED_OUT = 4
 WAIT_FOR_RESPONSE = 5
 CONNECT_WAIT = 6
 CONNECTED = 100
+CHECK_AUTH_KEY = 200
 
 global previousState
 global state
@@ -115,6 +124,9 @@ systemName = None
 hostName = None
 ipV4 = ""
 lastIpForwardingEnabled = False
+authKey = ""
+lastResponseTime = 0
+checkAuthKey = False
 
 def mainLoop ():
 	global DbusSettings
@@ -125,6 +137,9 @@ def mainLoop ():
 	global hostName
 	global ipV4
 	global lastIpForwardingEnabled
+	global authKey
+	global lastResponseTime
+	global checkAuthKey
 
 	startTime = time.time ()
 
@@ -137,13 +152,13 @@ def mainLoop ():
 
 	if systemNameObj == None:
 		systemName = None
-		hostName = None
+		hostName = ""
 	else:
 		name = systemNameObj.GetValue ()
 		if name != systemName:
 			systemName = name
 			if name == None or name == "":
-				hostName = None
+				hostName = ""
 				logging.warning ("no system name so no host name" )
 			else:
 				# some characters permitted for the GX system name aren't valid as a URL name
@@ -212,6 +227,7 @@ def mainLoop ():
 		backendRunning = False
 
 	if backendRunning:
+		resetConnection = False
 
 		# check for GUI commands and act on them
 		guiCommand = DbusService['/GuiCommand']
@@ -220,27 +236,31 @@ def mainLoop ():
 			DbusService['/GuiCommand'] = ""
 			if guiCommand == 'logout':
 				logging.info ("logout command received")
-				# logout takes time and can't specify a timeout so provide feedback first
-				DbusService['/State'] = WAIT_FOR_RESPONSE
-				_, stderr, exitCode = sendCommand ( [ tsControlCmd, 'logout' ] )
-				if exitCode != 0:
-					logging.error ( "tailscale logout failed " + str (exitCode) )
-					logging.error (stderr)
-				else:
-					state = WAIT_FOR_RESPONSE
-			else:
-				logging.warning ("invalid command received " + guiCommand)
+				resetConnection = True
+				lastResponseTime = startTime
+
+		newAuthKey = DbusSettings ['authKey']
+		if newAuthKey == None:
+			newAuthKey = ""
+		if newAuthKey != authKey and newAuthKey != None and newAuthKey != "":
+			logging.info ("new auth key detected")
+			resetConnection = True
+			checkAuthKey = False
+		authKey = newAuthKey
 
 		# get current status from tailscale and update state
 		stdout, stderr, exitCode = sendCommand ( [ tsControlCmd, 'status' ] )
 		# don't update state if we don't get a response
 		if stdout == None or stderr == None:
+			logging.error ("no response to status command")
+			checkAuthKey = False
 			pass
 		elif "failed to connect" in stderr:
 			state = NOT_RUNNING
+			checkAuthKey = False
 		elif "Tailscale is stopped" in stdout:
 			state = STOPPED
-		elif "Log in at" in stdout:
+		elif "Log in at" in stdout and authKey == "":
 			state = CONNECT_WAIT
 			lines = stdout.splitlines ()
 			loginInfo = lines[1].replace ("Log in at: ", "")
@@ -251,15 +271,27 @@ def mainLoop ():
 				state = LOGGED_OUT
 		elif exitCode == 0:
 			state = CONNECTED
+			checkAuthKey = False
 			# extract this host's name from status message
 			if ipV4 != "":
 				for line in stdout.splitlines ():
 					if ipV4 in line:
-							thisHostName = line.split()[1]
+						thisHostName = line.split()[1]
 
 		# don't update state if we don't recognize the response
 		else:
 			pass
+
+		# response timeout indicates no internet connection to tailscale server
+		#  or possibly bad auth key
+		if state == WAIT_FOR_RESPONSE and authKey != "":
+			if lastResponseTime != 0 and startTime - lastResponseTime > 30:
+				logging.error ("timeout waiting for response from tailscale - check auth key")
+				resetConnection = True
+				checkAuthKey = True
+		else:
+			lastResponseTime = startTime
+
 
 		# make changes necessary to bring connection up
 		#	up will fully connect if login had succeeded
@@ -270,35 +302,43 @@ def mainLoop ():
 		#	tailscale has processed the first one
 		#	ALMOST any state change will signal the wait is over
 		#	(status not included)
-		if state != previousState:
-			if state == STOPPED and previousState != WAIT_FOR_RESPONSE:
-				if systemName == None or systemName == "":
-					logging.info ("starting tailscale without host name")
-					_, stderr, exitCode = sendCommand ( [ tsControlCmd, 'up',
-								'--timeout=0.1s' ] )
-				else:
-					logging.info ("starting tailscale with host name:" + hostName)
-					_, stderr, exitCode = sendCommand ( [ tsControlCmd, 'up',
-								'--timeout=0.1s', '--hostname=' + hostName ] )
-				if exitCode != 0:
-					logging.error ( "tailscale up failed " + str (exitCode) )
-					logging.error (stderr)
-				else:
-					state = WAIT_FOR_RESPONSE
-			elif state == LOGGED_OUT and previousState != WAIT_FOR_RESPONSE:
-				if systemName == None or systemName == "":
-					logging.info ("logging in to tailscale without host name")
-					_, stderr, exitCode = sendCommand ( [ tsControlCmd, 'login',
-								'--timeout=0.1s' ], )
-				else:
-					logging.info ("logging in to tailscale with host name:" + hostName)
-					_, stderr, exitCode = sendCommand ( [ tsControlCmd, 'login', 
-								'--timeout=0.1s', '--hostname=' + hostName ] )
-				if exitCode != 0:
-					logging.error ( "tailscale login failed " + str (exitCode) )
-					logging.error (stderr)
-				else:
-					state = WAIT_FOR_RESPONSE
+
+		# resetConnection logs out of tailscale
+		# so that a new connection can be made
+		# this will occur automatically if an auth key is set
+		# otherwise, a message to manually connect via tailscale admin console is displayed
+		if resetConnection:
+			if authKey == "":
+				logging.info ( "resetting connetion for manual connection" )
+			else:
+				logging.info ( "resetting connetion for new auth key: " + authKey)
+			# logout takes time and can't specify a timeout so provide feedback first
+			DbusService['/State'] = WAIT_FOR_RESPONSE
+			state = WAIT_FOR_RESPONSE
+			_, stderr, exitCode = sendCommand ( [ tsControlCmd, 'logout' ] )
+			if exitCode != 0:
+				logging.error ( "tailscale logout failed " + str (exitCode) )
+				logging.error (stderr)
+			else:
+				state = LOGGED_OUT
+		elif state == STOPPED:
+			logging.info ("starting tailscale " + hostName + " " + authKey)
+			_, stderr, exitCode = sendCommand ( [ tsControlCmd, 'up',
+						'--timeout=0.1s' ], hostName=hostName, authKey=authKey )
+			if exitCode != 0 and not "timeout" in stderr:
+				logging.error ( "tailscale up failed " + str (exitCode) )
+				logging.error (stderr)
+			else:
+				state = WAIT_FOR_RESPONSE
+		elif state == LOGGED_OUT:
+			logging.info ("logging in to tailscale " + hostName + " " + authKey)
+			_, stderr, exitCode = sendCommand ( [ tsControlCmd, 'login',
+						'--timeout=0.1s' ], hostName=hostName, authKey=authKey )
+			if exitCode != 0 and not "timeout" in stderr:
+				logging.error ( "tailscale login failed " + str (exitCode) )
+				logging.error (stderr)
+			else:
+				state = WAIT_FOR_RESPONSE
 
 		# show IP addresses only if connected
 		if state == CONNECTED:
@@ -320,12 +360,15 @@ def mainLoop ():
 			DbusService['/IPv4'] = ""
 			DbusService['/IPv6'] = ""
 			DbusService['/HostName'] = ""
-
 	else:
 		state = NOT_RUNNING
+		checkAuthKey = False
 
 	# update dbus values regardless of state of the link
-	DbusService['/State'] = state
+	if checkAuthKey:
+		DbusService['/State'] = CHECK_AUTH_KEY
+	else:
+		DbusService['/State'] = state
 	DbusService['/LoginLink'] = loginInfo
 
 	previousState = state
@@ -365,7 +408,8 @@ def main():
 	dbusSettingsPath = "com.victronenergy.settings"
 
 	settingsList =	{ 'enabled': [ '/Settings/Services/Tailscale/Enabled', 0, 0, 1 ],
-					  'customArguements': [ '/Settings/Services/Tailscale/CustomArguments', "", 0, 0 ]
+					  'customArguements': [ '/Settings/Services/Tailscale/CustomArguments', "", 0, 0 ],
+					  'authKey' :  [ '/Settings/Services/Tailscale/AuthKey', "", 0, 0 ]
 					}
 	DbusSettings = SettingsDevice(bus=theBus, supportedSettings=settingsList,
 					timeout = 30, eventCallback=None )

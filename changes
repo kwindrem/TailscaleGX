@@ -1,3 +1,6 @@
+v2.0:
+	add tailscale auth key option
+
 v1.12:
 	v1.10 failed to update properly on GitHub
 v1.11:

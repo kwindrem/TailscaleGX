@@ -93,6 +93,27 @@ To do so, turn on IP forwarding in the Tailscale GX setup menu.
 
 Note that IP forwarding will impact CPU performance so use with caution.
 
+# Tailscale authorization key
+
+An alternate way to connect the GX device to your tailnet is to use an authorization key.
+
+This key is generated under settings in your tailscale admin console.
+It then must be entered into the GX device.
+
+The complete key is longer than supported by the GUI edit box
+so it is split into up to three separate pieces for entry.
+The complete code is shown above the three editable parts.
+Each part is limited to 25 characters.
+
+If you have console access to the GX device, it is far easier to use
+dbus-spy to enter the key into
+
+> com.victronenergy.settings /Settings/Services/Tailscale/AuthKey
+
+Or use the command line interface:
+
+> dbus -y com.victronenergy.settings /Settings/Services/Tailscale/AuthKey SetValue [key]
+
 # Installing
 
 TailscaleGX can be installed from Package manager.
