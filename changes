@@ -1,3 +1,6 @@
+v2.1:
+	update ReadMe file to mention command line configuration
+
 v2.0:
 	add tailscale auth key option
 

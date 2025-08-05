@@ -93,6 +93,17 @@ To do so, turn on IP forwarding in the Tailscale GX setup menu.
 
 Note that IP forwarding will impact CPU performance so use with caution.
 
+# Other tailscale enhancements
+
+It is possible to customize tailscale via it's command line interface.
+All those parameters are stored in the tailscale config which is located
+in an area of the file system that survives a firmware update so thise settings would be nonvolatile.
+
+E.g.,:
+
+>__/data/TailscaleGX/tailscale set --advertise-routes "192.168.8.0/24"__
+
+
 # Tailscale authorization key
 
 An alternate way to connect the GX device to your tailnet is to use an authorization key.
