@@ -1,8 +1,8 @@
 # TailscaleGX
 
-This package is a user interface for tailscale on Victron Energy GX devices.
+This package is adds the Tailscale VPN software including a user interface to Victron GX devices.
 
-tailscale provides is a VPN-like connection for virtually any device.
+Tailscale provides a VPN-like connection for virtually any device.
 
 Victron VRM provides access to the GX device's GUI,
 but not a command line interface to the GX devie.
@@ -22,13 +22,6 @@ And more information is available at:
 https://tailscale.com
 
 TailscaleReadMe.md file is also included in this package.
-
-# NOTE
-
-tailscale is being added to Venus OS.
-When a stock tailscale is detected, TailscaleGX will not run to avoid conflics
-The firmware version that will include tailscale has not been determined so the normal
-obsolete version mechamism is not used at the moment but will be added when the version is known.
 
 # NOTE
 Support for firmware prior to v3.10 has been dropped starting with TailScaleGX v1.6
