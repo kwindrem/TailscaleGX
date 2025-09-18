@@ -1,8 +1,8 @@
 # TailscaleGX
 
-This package is a user interface for tailscale on Victron Energy GX devices.
+This package is adds the Tailscale VPN software including a user interface to Victron GX devices.
 
-tailscale provides is a VPN-like connection for virtually any device.
+Tailscale provides a VPN-like connection for virtually any device.
 
 Victron VRM provides access to the GX device's GUI,
 but not a command line interface to the GX devie.
@@ -25,10 +25,14 @@ TailscaleReadMe.md file is also included in this package.
 
 # NOTE
 
-tailscale is being added to Venus OS.
-When a stock tailscale is detected, TailscaleGX will not run to avoid conflics
-The firmware version that will include tailscale has not been determined so the normal
-obsolete version mechamism is not used at the moment but will be added when the version is known.
+Victron Energy has tabled a native tailscale implementation due to security concerns.
+
+TailscaleGX will continue to provide tailscale support for those that understand and accept the security risks.
+
+TailscaleGX configuration is through the Classic UI only).
+No work is planned to support tailscale configuraiton via the New UI(aka gui-v2).
+Although it is also possible to confiture it via a combination of
+the command line (running /data/TailscaleGX/tailscale) and dbus-spy (to turn tailscale on and off).
 
 # NOTE
 Support for firmware prior to v3.10 has been dropped starting with TailScaleGX v1.6
@@ -39,8 +43,9 @@ If you are running older versions, change the branch/tag to preV3.10support
 
 # Using
 
-ssh access must be enabled in Settings / General, and a root password set
-or any ssh tool will not be able to access the GX device.
+ssh access does NOT need to be enabled for ssh access via tailscale !
+However you may need to define a root password or enable ssh keys
+to complete the login.
 To do this refer to:
 
 https://www.victronenergy.com/live/ccgx:root_access

@@ -1,3 +1,7 @@
+v2.2:
+	update to tailscale v1.86
+	updated ReadMe.md to remove future Victron support (security issues), etc.
+
 v2.1:
 	update ReadMe file to mention command line configuration
 
