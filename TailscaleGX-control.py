@@ -27,6 +27,7 @@
 #		/HostName	as above but as a host name
 #		/LoginLink	temorary URL for connecting to tailscale
 #						for initiating a connection
+#		/LoginServer url for custom tailscale control server (headscale)  
 #		/AuthKey	tailscale authorization key (optional connection mechanism)
 #		/GuiCommand	GUI writes string here to request an action:
 #			logout
@@ -57,6 +58,7 @@ import shutil
 import dbus
 import time
 import re
+from urllib.parse import urlparse
 from gi.repository import GLib
 # add the path to our own packages for import
 sys.path.insert(1, "/data/SetupHelper/velib_python")
@@ -116,6 +118,7 @@ global systemName
 global hostName
 global ipV4
 global lastIpForwardingEnabled
+global login_server
 
 previousState = UNKNOWN_STATE
 state = UNKNOWN_STATE
@@ -137,6 +140,7 @@ def mainLoop ():
 	global hostName
 	global ipV4
 	global lastIpForwardingEnabled
+	global login_server
 	global authKey
 	global lastResponseTime
 	global checkAuthKey
@@ -183,6 +187,17 @@ def mainLoop ():
 		backendRunning = True
 	else:
 		backendRunning = False
+
+    # Check if login_server is a url
+	login_server = DbusSettings ['loginServer'].strip() # remove accidental spaces
+	url_valid = False
+	if login_server != "":
+		if not (login_server.startswith("https://") or login_server.startswith("http://")):
+			login_server = f"https://{login_server}"
+		
+		parsed = urlparse(login_server)
+		if parsed.scheme in ['http', 'https'] and parsed.netloc != "":
+			url_valid = True
 
 	tailscaleEnabled = DbusSettings ['enabled'] == 1
 	if tailscaleEnabled and state == CONNECTED:
@@ -332,7 +347,12 @@ def mainLoop ():
 				state = WAIT_FOR_RESPONSE
 		elif state == LOGGED_OUT:
 			logging.info ("logging in to tailscale " + hostName + " " + authKey)
-			_, stderr, exitCode = sendCommand ( [ tsControlCmd, 'login',
+			
+			if login_server != "" and url_valid:
+				_, stderr, exitCode = sendCommand ( [ tsControlCmd, 'login',
+						f"--login-server={login_server}",'--timeout=0.1s' ], hostName=hostName, authKey=authKey )
+			else:
+				_, stderr, exitCode = sendCommand ( [ tsControlCmd, 'login',
 						'--timeout=0.1s' ], hostName=hostName, authKey=authKey )
 			if exitCode != 0 and not "timeout" in stderr:
 				logging.error ( "tailscale login failed " + str (exitCode) )
@@ -409,7 +429,8 @@ def main():
 
 	settingsList =	{ 'enabled': [ '/Settings/Services/Tailscale/Enabled', 0, 0, 1 ],
 					  'customArguements': [ '/Settings/Services/Tailscale/CustomArguments', "", 0, 0 ],
-					  'authKey' :  [ '/Settings/Services/Tailscale/AuthKey', "", 0, 0 ]
+					  'authKey' :  [ '/Settings/Services/Tailscale/AuthKey', "", 0, 0 ],
+					  'loginServer': [ '/Settings/Services/Tailscale/LoginServer', "", 0, 0 ]
 					}
 	DbusSettings = SettingsDevice(bus=theBus, supportedSettings=settingsList,
 					timeout = 30, eventCallback=None )

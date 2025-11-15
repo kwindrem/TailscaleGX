@@ -30,6 +30,9 @@ MbPage
 	property bool isEnabled: enable.checked && isRunning
 	property bool isConnected: connectState == 100 && isEnabled
 
+	VBusItem { id: loginServerItem; bind: Utils.path(settingsPrefix, "/LoginServer") }
+    property string loginServer: loginServerItem.valid ? loginServerItem.value : ""
+
 	VBusItem { id: authKeyItem; bind: Utils.path(settingsPrefix, "/AuthKey") }
 	property string authKey: authKeyItem.valid ? authKeyItem.value : ""
 	property string joinedKey: keyPt1.item.value + keyPt2.item.value + keyPt3.item.value
@@ -129,6 +132,15 @@ MbPage
 			maximumLength: 25
 			item.value: authKey.substring (50)
 			onEditDone: authKeyItem.setValue (joinedKey)
+		}
+		MbEditBox
+		{
+			id: login_server
+			description: "Login Server URL (Headscale)"
+			showAccessLevel: User.AccessInstaller
+			maximumLength: 50
+			item.value: loginServer
+			onEditDone: loginServerItem.setValue(item.value)
 		}
 	}
 }
