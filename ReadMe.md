@@ -179,3 +179,11 @@ A second service __TailscaleGX-control__:
 - collects login and connection status from tailscale
 - provides this status to the GUI
 - prompts the user for necessary steps to establish a connection
+
+# Custom Control Server (Headscale)
+
+It possible to use the tailscale client with (Custom Control Server)[https://tailscale.com/kb/1507/custom-control-server] by passing the `--login-server=<URL>`.
+
+To setup TailscaleGX to use your Custom Control Server (Headscale)[https://headscale.net/stable/] you should add your server url in the __Login Server URL (Headscale)__ at the end of __TailscaleGX Settings__ page, and then enable __Allow remote connections__.
+
+Then it should appear invite url of your instance to add the GX device to network, or you can enter the Pre-auth Key.
