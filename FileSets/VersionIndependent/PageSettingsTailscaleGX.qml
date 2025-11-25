@@ -34,6 +34,9 @@ MbPage
 	property string authKey: authKeyItem.valid ? authKeyItem.value : ""
 	property string joinedKey: keyPt1.item.value + keyPt2.item.value + keyPt3.item.value
 
+	VBusItem { id: loginServerUrlItem; bind: Utils.path(servicePrefix, "/LoginServerUrl") }
+	property string loginServerUrl: loginServerUrlItem.valid ? loginServerUrlItem.value : ""
+
 	function getState ()
 	{
 		if ( ! isRunning )
@@ -52,11 +55,25 @@ MbPage
 		else if ( connectState == 4)
 			return qsTr ("this GX device is logged out of tailscale")
 		else if ( connectState == 5)
-			return qsTr ("waiting for a response from tailscale ...")
+		{
+			if (loginServerUrl == "")
+				return qsTr ("waiting for a response from tailscale ...")
+			else
+				return qsTr ("waiting for a response from login server\n" + loginServerUrl)
+		}
 		else if ( connectState == 6)
-			return ( qsTr ("connect this GX device to your tailscale account at:\n\n") + loginLink )
-		else if ( connectState == 200 )
-			return ( qsTr ("login timeout - check auth key"))
+			return ( qsTr ("connect this GX device to your account at:\n\n") + loginLink )
+		else if ( connectState == 201 )
+		{
+			if (loginServerUrl != "" && authKey != "")
+				return ( qsTr ("server timeout - check login server URL and auth key"))
+			else if (loginServerUrl != "")
+				return ( qsTr ("server timeout - check login server URL"))
+			else if (authKey != "")
+				return ( qsTr ("server timeout - check auth key"))
+			else
+				return ( qsTr ("server timeout"))
+		}
 		else
 			return ( qsTr ( "unknown state " ) + connectState )
 	}
@@ -97,10 +114,20 @@ MbPage
 			writeAccessLevel: User.AccessInstaller
 			show: isConnected
 		}
+		MbEditBox
+		{
+			id: loginServer
+			description: "Alternate Login Server URL"
+			showAccessLevel: User.AccessInstaller
+			maximumLength: 50
+			item.bind: Utils.path(settingsPrefix, "/LoginServer")
+			show: isEnabled
+		}
 		MbItemText
 		{
 			text: qsTr ("Tailscale authorization key:\n") + joinedKey + qsTr ("\nenter below in up to three parts")
 			wrapMode: Text.WrapAnywhere
+			show: isEnabled
 		}
 		
 		MbEditBox
@@ -111,6 +138,7 @@ MbPage
 			maximumLength: 25
 			item.value: authKey.substring (0, 25)
 			onEditDone: authKeyItem.setValue (joinedKey)
+			show: isEnabled
 		}
 		MbEditBox
 		{
@@ -120,6 +148,7 @@ MbPage
 			maximumLength: 25
 			item.value: authKey.substring (25, 50)
 			onEditDone: authKeyItem.setValue (joinedKey)
+			show: isEnabled
 		}
 		MbEditBox
 		{
@@ -129,6 +158,7 @@ MbPage
 			maximumLength: 25
 			item.value: authKey.substring (50)
 			onEditDone: authKeyItem.setValue (joinedKey)
+			show: isEnabled
 		}
 	}
 }

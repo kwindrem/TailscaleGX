@@ -109,9 +109,9 @@ E.g.,:
 >__/data/TailscaleGX/tailscale set --advertise-routes "192.168.8.0/24"__
 
 
-# Tailscale authorization key
+# Authorization key
 
-An alternate way to connect the GX device to your tailnet is to use an authorization key.
+An alternate way to connect the GX device is to use an authorization key.
 
 This key is generated under settings in your tailscale admin console.
 It then must be entered into the GX device.
@@ -121,7 +121,7 @@ so it is split into up to three separate pieces for entry.
 The complete code is shown above the three editable parts.
 Each part is limited to 25 characters.
 
-If you have console access to the GX device, it is far easier to use
+If you have command line access to the GX device, it is far easier to use
 dbus-spy to enter the key into
 
 > com.victronenergy.settings /Settings/Services/Tailscale/AuthKey
@@ -129,6 +129,29 @@ dbus-spy to enter the key into
 Or use the command line interface:
 
 > dbus -y com.victronenergy.settings /Settings/Services/Tailscale/AuthKey SetValue [key]
+
+
+# Alternate login server
+
+It possible to use the tailscale client with an alternate login server
+otherwise know as a Custom Control Server.
+
+https://tailscale.com/kb/1507/custom-control-server
+
+Headscale is one such server https://headscale.net
+
+To switch from tailscale's 'tailnet' you simply specify the URL of the alternate server in
+__Alternate Login Server URL__ via the GX device's UI
+
+If you do not specify http:// or https://, the latter is appended to what is entered.
+
+Refer to documentaion provided with the alternate server for how to set things up,
+how to connect to it and how to an generate authorization key if one is used.
+
+The alternate login server may support authorization keys.
+If so, they the key be entered as described above
+
+Use of an alternate login server is not guaranteed to work with TailscaleGX.
 
 # Installing
 
