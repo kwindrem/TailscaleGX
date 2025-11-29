@@ -64,17 +64,30 @@ from gi.repository import GLib
 sys.path.insert(1, "/data/SetupHelper/velib_python")
 from vedbus import VeDbusService
 from settingsdevice import SettingsDevice
+import json
 
 
 # sends a unix command
 #	eg sendCommand ( [ 'svc', '-u' , serviceName ] )
 #
 # stdout, stderr and the exit code are returned as a list to the caller
+#
+# use the following return codes
+#	124: timeout: command aborted (timeout must be set or sendCommand never returns)
+#	126: command not executable (e.g., due to incorrect permissions).
+#	127: command not found
+#	otherwise the process exit code is returned to caller of sendCommand
+#		this will typically be 0 on success and any other value on failure
 
-def sendCommand ( command=None, loginServer=None, hostName=None, authKey=None ):
+global lastSendCommandException
+lastSendCommandException = None
+
+def sendCommand ( command=None, loginServer=None, hostName=None, authKey=None, timeout=None ):
+	global lastSendCommandException
+
 	if command == None:
 		logging.error ( "sendCommand: no command specified" )
-		return None, None, None
+		return "", "", 127
 
 	if loginServer != None and loginServer != "":
 		command += [ "--login-server=" + loginServer ]
@@ -84,14 +97,26 @@ def sendCommand ( command=None, loginServer=None, hostName=None, authKey=None ):
 		command += [ "--auth-key=" + authKey ]
 
 	try:
-		proc = subprocess.Popen ( command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-	except:
-		logging.error ("sendCommand: " + command + " failed")
-		return None, None, None
+		proc = subprocess.Popen ( command, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+		stdout, stderr = proc.communicate (timeout=timeout)
+	except subprocess.TimeoutExpired:
+			return "", "", 124
+	except Exception as ex:
+		newType = type (ex)
+		newArgs = ex.args
+		if lastSendCommandException == None:
+			lastType = None
+			lastArgs = None
+		else:
+			lastType = type (lastSendCommandException)
+			lastArgs = ex.args
+		if lastSendCommandException == None or newType != lastType or newArgs != lastArgs:
+			logging.error ("sendCommand: " + str (command) + " failed: " + str (ex) )
+		lastSendCommandException = ex
+		return "", "", 126
 	else:
-		out, err = proc.communicate ()
-		stdout = out.decode ().strip ()
-		stderr = err.decode ().strip ()
+		stdout = stdout.strip ()
+		stderr = stderr.strip ()
 		return stdout, stderr, proc.returncode
 
 
@@ -105,42 +130,44 @@ DbusService = None
 # state values
 UNKNOWN_STATE = 0
 BACKEND_STARTING = 1
-NOT_RUNNING = 2
+BACKEND_NOT_RUNNING = 2
 STOPPED = 3
 LOGGED_OUT = 4
 WAIT_FOR_RESPONSE = 5
 CONNECT_WAIT = 6
+STATUS_TIMEOUT = 7
 CONNECTED = 100
 
 INIT = 99
-
-CHECK_LOGIN_SERVER = 201
-
+# state value for UI only
+SERVER_ERROR = 201
+CLIENT_ERROR = 202
 
 global previousState
 global state
 global systemNameObj
 global systemName
 global hostName
-global ipV4
 global lastIpForwardingEnabled
 global loginServer
 global loginServerUrl
 global resetConnection
+global restartBackend
 
 previousState = INIT
 state = INIT
 systemNameObj = None
 systemName = None
 hostName = None
-ipV4 = ""
 lastIpForwardingEnabled = False
 authKey = None
 lastResponseTime = 0
-checkLoginServer = False
+uiStateOveride = UNKNOWN_STATE
+reportClientError = False
 loginServer = None
 loginServerUrl = None
 resetConnection = False
+restartBackend = False
 
 def mainLoop ():
 	global DbusSettings
@@ -149,22 +176,32 @@ def mainLoop ():
 	global state
 	global systemName
 	global hostName
-	global ipV4
 	global lastIpForwardingEnabled
 	global authKey
 	global lastResponseTime
-	global checkLoginServer
+	global uiStateOveride
+	global reportClientError
 	global loginServer
 	global loginServerUrl
 	global resetConnection
+	global restartBackend
 
 	startTime = time.time ()
+	if state == INIT:
+		lastResponseTime = startTime
+		restartBackend = False
+		uiStateOveride = UNKNOWN_STATE
 
-	backendRunning = None
 	tailscaleEnabled = False
 	ipForwardingEnabled = False
-	thisHostName = None
+	thisHostName = ""
 	loginInfo = ""
+	backendState = ""
+	authUrl = ""
+	ip1 = ""
+	ip2 = ""
+	keyExpiry = ""
+	tailnetName = ""
 
 	if systemNameObj == None:
 		systemName = None
@@ -194,7 +231,7 @@ def mainLoop ():
 		# acknowledge receipt of command so another can be sent
 		DbusService['/GuiCommand'] = ""
 		if guiCommand == 'logout':
-			logging.info ("logout command received")
+			logging.info ("logout command received from UI")
 			lastResponseTime = startTime
 			resetConnection = True
 
@@ -218,7 +255,7 @@ def mainLoop ():
 			logging.info ("using login server: " + loginServerUrl)
 		else:
 			logging.info ("using tailscale's login server")
-		checkLoginServer = False
+		uiStateOveride = UNKNOWN_STATE
 		if state != INIT:
 			resetConnection = True
 
@@ -231,19 +268,13 @@ def mainLoop ():
 			logging.info ("using auth key: " + authKey)
 		else:
 			logging.info ("auth key disabled - must login at login server")
-		checkLoginServer = False
+		uiStateOveride = UNKNOWN_STATE
 		if state != INIT:
 			resetConnection = True
 
 	# see if backend is running
-	stdout, stderr, exitCode = sendCommand ( [ 'svstat', "/service/TailscaleGX-backend" ] )
-	if stdout == None:
-		logging.warning ("TailscaleGX-backend not in services")
-		backendRunning = None
-	elif stderr == None or "does not exist" in stderr:
-		logging.warning ("TailscaleGX-backend not in services")
-		backendRunning = None
-	elif stdout != None and ": up" in stdout:
+	stdout, _, _ = sendCommand ( [ 'svstat', "/service/TailscaleGX-backend" ] )
+	if ": up" in stdout:
 		backendRunning = True
 	else:
 		backendRunning = False
@@ -252,7 +283,7 @@ def mainLoop ():
 	if tailscaleEnabled and state == CONNECTED:
 		ipForwardingEnabled = DbusSettings ['customArguements'] == "--advertise-exit-node=true"
 	else:
-		ipForwardingEnabled = ""
+		ipForwardingEnabled = False
 
 	# update IP forwarding and exit-node enable
 	if ipForwardingEnabled != lastIpForwardingEnabled:
@@ -276,73 +307,105 @@ def mainLoop ():
 			logging.error ( "could not change tailscale exit-node setting to " + enabled2 + " " + str (exitCode) )
 
 	# start backend
-	if tailscaleEnabled and backendRunning == False:
-		logging.info ("starting TailscaleGX-backend")
-		_, _, exitCode = sendCommand ( [ 'svc', '-u', "/service/TailscaleGX-backend"] )
-		if exitCode != 0:
-			logging.error ( "start TailscaleGX failed " + str (exitCode) )
-		state = BACKEND_STARTING
+	if tailscaleEnabled:
+		if restartBackend:
+			logging.info ("restarting TailscaleGX-backend")
+			# use separate down, then up command rather than -t
+			#	because the service starts could be down and -t won't start it if so
+			_, _, exitCode = sendCommand ( [ 'svc', '-d', "/service/TailscaleGX-backend"] )
+			if exitCode != 0:
+				logging.error ( "restart TailscaleGX failed " + str (exitCode) )
+			else:
+				time.sleep (0.2)
+				backendRunning = False
+				_, _, exitCode = sendCommand ( [ 'svc', '-u', "/service/TailscaleGX-backend"] )
+				if exitCode != 0:
+					logging.error ( "restart TailscaleGX failed " + str (exitCode) )
+				else:
+					state = BACKEND_STARTING
+			restartBackend = False
+		elif not backendRunning and state != BACKEND_STARTING:
+			logging.info ("starting TailscaleGX-backend")
+			_, _, exitCode = sendCommand ( [ 'svc', '-u', "/service/TailscaleGX-backend"] )
+			if exitCode != 0:
+				logging.error ( "start TailscaleGX failed " + str (exitCode) )
+			else:
+				state = BACKEND_STARTING
 	# stop backend
-	elif not tailscaleEnabled and backendRunning == True:
+	elif not tailscaleEnabled and backendRunning:
 		logging.info ("stopping TailscaleGX-backend")
 		_, _, exitCode = sendCommand ( [ 'svc', '-d', "/service/TailscaleGX-backend"] )
 		if exitCode != 0:
 			logging.error ( "stop TailscaleGX failed " + str (exitCode) )
 		backendRunning = False
 
-	if backendRunning:
-		# get current status from tailscale and update state
-		stdout, stderr, exitCode = sendCommand ( [ tsControlCmd, 'status' ] )
-		# don't update state if we don't get a response
-		if stdout == None or stderr == None:
-			logging.error ("no response to status command")
-			checkLoginServer = False
-			pass
-		elif "failed to connect" in stderr:
-			state = NOT_RUNNING
-			checkLoginServer = False
-		elif "Tailscale is stopped" in stdout:
-			state = STOPPED
-		elif "Log in at" in stdout and authKey == "":
-			state = CONNECT_WAIT
-			lines = stdout.splitlines ()
-			loginInfo = lines[1].replace ("Log in at: ", "")
-		elif "Logged out" in stdout:
-			# can get back to this condition while loggin in
-			# so wait for another condition to update state
-			if previousState != WAIT_FOR_RESPONSE:
-				state = LOGGED_OUT
+	if not backendRunning:
+		if state != BACKEND_STARTING:
+			state = BACKEND_NOT_RUNNING
+		# update delay to prevent reporting an immediate no response when backend begins
+		lastResponseTime = startTime
+	else:
+		stdout, stderr, exitCode = sendCommand ( [ tsControlCmd, 'status', '--peers=false', '--json=true' ],
+					timeout=1.0 )
+		if exitCode == 124:
+			state = STATUS_TIMEOUT
+		elif exitCode > 125:
+			state = WAIT_FOR_RESPONSE
 		elif exitCode == 0:
-			state = CONNECTED
-			checkLoginServer = False
-			# extract this host's name from status message
-			if ipV4 != "":
-				for line in stdout.splitlines ():
-					if ipV4 in line:
-						thisHostName = line.split()[1]
+			try:
+				status = json.loads (stdout)
+				backendState = status["BackendState"]
+				if backendState == "NeedsLogin":
+					authUrl = status["AuthURL"]
+					if state != CONNECT_WAIT and state != WAIT_FOR_RESPONSE:
+						state = LOGGED_OUT
+				elif backendState == "Running":
+					state = CONNECTED
+					thisHostName = status["Self"]["HostName"]
+					ip1 = status["Self"]["TailscaleIPs"][0]
+					ip2 = status["Self"]["TailscaleIPs"][1]
+					keyExpiry = status["Self"]["KeyExpiry"]
+					tailnetName = status["Self"]["CapMap"]["tailnet-display-name"][0]
+				elif backendState == "Stopped":
+					state = STOPPED
+				else:
+					logging.warning ("Unprocessed backendState " + str (backendState) )
 
-		# don't update state if we don't recognize the response
+			# ignore invalid json keys silently
+			except KeyError as ex:
+				#### DEBUG logging.error ("#### invalid parameter " + str (ex) + " -- skipping")
+				pass
+
+			except Exception as ex:
+				logging.error ("Status message json parsing error: ", str (ex.args) )
+				state = WAIT_FOR_RESPONSE
+
 		else:
-			pass
+			logging.error ("Error reading status", exitCode)
+			state = WAIT_FOR_RESPONSE
 
-		# response timeout indicates no internet connection to tailscale server
-		#  or possibly bad auth key
-		if state == WAIT_FOR_RESPONSE:
-			if lastResponseTime != 0 and startTime - lastResponseTime > 30:
+		# no timeout currently occurring - update delay
+		if state != WAIT_FOR_RESPONSE and state != STATUS_TIMEOUT:
+			lastResponseTime = startTime
+			uiStateOveride = UNKNOWN_STATE
+		# delay expired - log results and trigger connection reset
+		elif lastResponseTime != 0 and startTime - lastResponseTime > 10: #### DEBUG 30:
+			lastResponseTime = startTime	# reset timer so next error report is spaced by the timer
+			if state == STATUS_TIMEOUT:
+				uiStateOveride = CLIENT_ERROR
+				restartBackend = True
+				logging.error ("timeout waiting for response from tailscale client")
+			elif state == WAIT_FOR_RESPONSE:
+				resetConnection = True
+				uiStateOveride = SERVER_ERROR
 				if loginServerUrl != "" and authKey != "":
 					logging.error ("timeout waiting for response from " + loginServerUrl + " - check URL and auth key")
-					checkLoginServer = True
 				elif loginServerUrl != "":
 					logging.error ("timeout waiting for response from " + loginServerUrl + " - check URL")
-					checkLoginServer = True
 				elif authKey != "":
 					logging.error ("timeout waiting for response from tailscale - check auth key")
-					checkLoginServer = True
-				resetConnection = True
-				lastResponseTime = startTime
-		else:
-			lastResponseTime = startTime
-
+				else:
+					logging.error ("timeout waiting for response - reason unknown")
 
 		# make changes necessary to bring connection up
 		#	will fully connect if login had previously succeeded
@@ -355,38 +418,20 @@ def mainLoop ():
 		#	ALMOST any state change will signal the wait is over
 		#	(status not included)
 
-		# resetConnection logs out of tailscale
-		# so that a new connection can be made
-		# this will occur if the server name, login server or auth key change (but not at startup)
-		#	or if user triggers a logout or there is a timeout while waiting to connect
+		# resetConnection attempts a new connection regardless of current state
+		#	this will occur if the server name, login server or auth key change (but not at startup)
+		#	or if UI triggers a logout or there is a timeout while waiting to connect
+		#	there is no need to log out since a login would follow anyway
+		#	and an exising connection won't survive the login
 	
-		if resetConnection:
-			if authKey == "":
-				logging.info ("resetting conneciton - must reconnect manually")
-			else:
-				logging.info ("resetting conneciton - if auth key valid, connection will be automatic")
-			# logout takes time and can't specify a timeout so provide feedback first
-			DbusService['/State'] = WAIT_FOR_RESPONSE
-			state = WAIT_FOR_RESPONSE
-			_, stderr, exitCode = sendCommand ( [ tsControlCmd, 'logout' ] )
-			if exitCode != 0:
-				logging.error ( "tailscale logout failed " + str (exitCode) )
-				logging.error (stderr)
-			else:
-				state = LOGGED_OUT
-			resetConnection = False
-
-		if state == STOPPED:
-			logging.info ("starting tailscale as " + hostName + " server: " + loginServerUrl
-							+ " key: " + authKey)
-			_, stderr, exitCode = sendCommand ( [ tsControlCmd, 'up', '--timeout=0.1s' ],
-						hostName=hostName, authKey=authKey, loginServer=loginServerUrl )
-			if exitCode != 0 and not "timeout" in stderr:
-				logging.error ( "tailscale up failed " + str (exitCode) )
-				logging.error (stderr)
-			else:
-				state = WAIT_FOR_RESPONSE
-		elif state == LOGGED_OUT:
+		if resetConnection or state == LOGGED_OUT or state == STOPPED:
+			if resetConnection:
+				resetConnection = False
+				if authKey == "":
+					logging.info ("resetting conneciton - must reconnect manually")
+				else:
+					logging.info ("resetting conneciton - if auth key valid, connection will be automatic")
+			## login resets the connection so don't need to send a logout
 			logging.info ("logging in to tailscale as " + hostName + " server: " + loginServerUrl
 							+ " key: " + authKey)
 			_, stderr, exitCode = sendCommand ( [ tsControlCmd, 'login', '--timeout=0.1s' ],
@@ -394,46 +439,40 @@ def mainLoop ():
 			if exitCode != 0 and not "timeout" in stderr:
 				logging.error ( "tailscale login failed " + str (exitCode) )
 				logging.error (stderr)
+			elif authKey == "":
+				state = CONNECT_WAIT
 			else:
 				state = WAIT_FOR_RESPONSE
+	# end if backendRunning
 
-		# show IP addresses only if connected
-		if state == CONNECTED:
-			if previousState != CONNECTED:
-				logging.info ("connection successful")
-			stdout, stderr, exitCode = sendCommand ( [ tsControlCmd, 'ip' ] )
-			if exitCode != 0:
-				logging.error ( "tailscale ip failed " + str (exitCode) )
-				logging.error (stderr)
-			if stdout != None and stdout != "":
-				ipV4, ipV6 = stdout.splitlines ()
-				DbusService['/IPv4'] = ipV4
-				DbusService['/IPv6'] = ipV6
-			else:
-				DbusService['/IPv4'] = "?"
-				DbusService['/IPv6'] = "?"
-			DbusService['/HostName'] = thisHostName
-		else:
-			DbusService['/IPv4'] = ""
-			DbusService['/IPv6'] = ""
-			DbusService['/HostName'] = ""
+
+	# show IP addresses only if connected
+	if state == CONNECTED:
+		if previousState != CONNECTED:
+			logging.info ("connection successful")
+		DbusService['/Ip1'] = ip1
+		DbusService['/Ip2'] = ip2
+		DbusService['/HostName'] = thisHostName
+		DbusService['/TailnetName'] = tailnetName
+		DbusService['/KeyExpiry'] = keyExpiry.split ("T")[0]
 	else:
-		state = NOT_RUNNING
-		checkLoginServer = False
-
-
+		DbusService['/Ip1'] = ""
+		DbusService['/Ip2'] = ""
+		DbusService['/HostName'] = ""
+		DbusService['/TailnetName'] = ""
+		DbusService['/KeyExpiry'] = ""
 	# update dbus values regardless of state of the link
-	if checkLoginServer:
-		DbusService['/State'] = CHECK_LOGIN_SERVER
+	if uiStateOveride != UNKNOWN_STATE:
+		DbusService['/State'] = uiStateOveride
 	else:
 		DbusService['/State'] = state
-	DbusService['/LoginLink'] = loginInfo
+	DbusService['/LoginLink'] = authUrl
 	DbusService['/LoginServerUrl'] = loginServerUrl
 
 	previousState = state
 	#### TODO: enable for testing
-	endTime = time.time ()
-	####print ("main loop time %3.1f mS" % ( (endTime - startTime) * 1000 ))
+	#### endTime = time.time ()
+	#### print ("main loop time %3.1f mS" % ( (endTime - startTime) * 1000 ))
 	return True
 
 def main():
@@ -519,10 +558,12 @@ def main():
 						productname = 'TailscaleGX-control',
 						firmwareversion = 1, hardwareversion = 0, connected = 1)
 
-	DbusService.add_path ( '/State', "" )
-	DbusService.add_path ( '/IPv4', "" )
-	DbusService.add_path ( '/IPv6', "" )
+	DbusService.add_path ( '/State', 0, 0, 0 )
+	DbusService.add_path ( '/Ip1', "" )
+	DbusService.add_path ( '/Ip2', "" )
 	DbusService.add_path ( '/HostName', "" )
+	DbusService.add_path ( '/TailnetName', "" )
+	DbusService.add_path ( '/KeyExpiry', "" )
 	DbusService.add_path ( '/LoginLink', "" )
 	DbusService.add_path ( '/LoginServerUrl', "" )
 

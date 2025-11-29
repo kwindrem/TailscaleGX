@@ -13,22 +13,26 @@ MbPage
 	title: qsTr("Remote access (tailscale) setup")
 	VBusItem { id: stateItem; bind: Utils.path(servicePrefix, "/State") }
 	VBusItem { id: loginItem; bind: Utils.path(servicePrefix, "/LoginLink") }
-	VBusItem { id: ipV4Item; bind: Utils.path(servicePrefix, "/IPv4") }
-	VBusItem { id: ipV6Item; bind: Utils.path(servicePrefix, "/IPv6") }
+	VBusItem { id: ip1Item; bind: Utils.path(servicePrefix, "/Ip1") }
+	VBusItem { id: ip2Item; bind: Utils.path(servicePrefix, "/Ip2") }
 	VBusItem { id: hostNameItem; bind: Utils.path(servicePrefix, "/HostName") }
+	VBusItem { id: tailnetNameItem; bind: Utils.path(servicePrefix, "/TailnetName") }
+	VBusItem { id: keyExpiryItem; bind: Utils.path(servicePrefix, "/KeyExpiry") }
 	VBusItem { id: commandItem; bind: Utils.path(servicePrefix, "/GuiCommand") }
 	VBusItem { id: enabledItem; bind: Utils.path(settingsPrefix, "/Enabled") }
 	VBusItem { id: customArgumentsItem; bind: Utils.path(settingsPrefix, "/CustomArguments") }
 
-	property int connectState: stateItem.valid ? stateItem.value : 0
-	property string ipV4: ipV4Item.valid ? ipV4Item.value : ""
-	property string ipV6: ipV6Item.valid ? ipV6Item.value : ""
+	property int state: stateItem.valid ? stateItem.value : 0
+	property string ip1: ip1Item.valid ? ip1Item.value : ""
+	property string ip2: ip2Item.valid ? ip2Item.value : ""
 	property string hostName: hostNameItem.valid ? hostNameItem.value : ""
+	property string tailnetName: tailnetNameItem.valid ? tailnetNameItem.value : ""
+	property string keyExpiry: keyExpiryItem.valid ? keyExpiryItem.value : ""
 	property string loginLink: loginItem.valid ? loginItem.value : ""
 	
 	property bool isRunning: stateItem.valid
 	property bool isEnabled: enable.checked && isRunning
-	property bool isConnected: connectState == 100 && isEnabled
+	property bool isConnected: state == 100 && isEnabled
 
 	VBusItem { id: authKeyItem; bind: Utils.path(settingsPrefix, "/AuthKey") }
 	property string authKey: authKeyItem.valid ? authKeyItem.value : ""
@@ -37,45 +41,63 @@ MbPage
 	VBusItem { id: loginServerUrlItem; bind: Utils.path(servicePrefix, "/LoginServerUrl") }
 	property string loginServerUrl: loginServerUrlItem.valid ? loginServerUrlItem.value : ""
 
+	function getExpiry ()
+	{
+		if ( keyExpiry != "" && authKey != "")
+			return ( qsTr ("node key expires: ") + keyExpiry + qsTr ("  auth key expires: ?") )
+		else if (keyExpiry != "")
+			return ( qsTr ("expires: ") + keyExpiry )
+		else if (authKey != "")
+			return ( qsTr ("  auth key expires: ?") )
+		else
+			return ( "" )
+	}
+	
 	function getState ()
 	{
 		if ( ! isRunning )
-			return qsTr ( "TailscaleGX control not running" )
+			return qsTr ("TailscaleGX control not running")
 		else if ( ! isEnabled )
-			return qsTr ( "remote connections not accepted\n (disabled above)" )
+			return qsTr ("remote connections not accepted\n(disabled above)")
 		else if ( isConnected )
-			return ( qsTr ( "accepting remote connections at:\n")
-					+ hostName + "\n" + ipV4 + "\n" + ipV6 )
-		else if ( connectState == 0 )
+			return ( qsTr ("accepting remote connections at:\n")
+					+ hostName + "\n" + ip1 + "\n" + ip2 + "\n" + getExpiry () )
+		else if ( state == 0 )
 			return ""
-		else if ( connectState == 1 )
+		else if ( state == 1 )
 			return qsTr ("starting ...")
-		else if ( connectState == 2 || connectState == 3)
+		else if ( state == 2 )
 			return qsTr ("tailscale starting ...")
-		else if ( connectState == 4)
+		else if ( state == 3)
+			return qsTr ("tailscale stopped")
+		else if ( state == 4)
 			return qsTr ("this GX device is logged out of tailscale")
-		else if ( connectState == 5)
+		else if ( state == 5 || ( state == 6 && loginLink == "" ) )
 		{
 			if (loginServerUrl == "")
-				return qsTr ("waiting for a response from tailscale ...")
+				return qsTr ("waiting for a response from tailscale server")
 			else
 				return qsTr ("waiting for a response from login server\n" + loginServerUrl)
 		}
-		else if ( connectState == 6)
-			return ( qsTr ("connect this GX device to your account at:\n\n") + loginLink )
-		else if ( connectState == 201 )
+		else if ( state == 6)
+				return ( qsTr ("connect this GX device to your account at:\n\n") + loginLink)
+		else if ( state == 7)
+			return ( qsTr ("waiting for response from tailscale client") )
+		else if ( state == 201 )
 		{
 			if (loginServerUrl != "" && authKey != "")
-				return ( qsTr ("server timeout - check login server URL and auth key"))
+				return ( qsTr ("server timeout - check login server URL and auth key") )
 			else if (loginServerUrl != "")
-				return ( qsTr ("server timeout - check login server URL"))
+				return ( qsTr ("server timeout - check login server URL") )
 			else if (authKey != "")
 				return ( qsTr ("server timeout - check auth key"))
 			else
 				return ( qsTr ("server timeout"))
 		}
+		else if ( state == 202 )
+			return ( qsTr ("tailscale client not responding") )
 		else
-			return ( qsTr ( "unknown state " ) + connectState )
+			return ( qsTr ( "unknown state " ) + state )
 	}
 	
     model: VisibleItemModel
@@ -88,16 +110,6 @@ MbPage
 			writeAccessLevel: User.AccessInstaller
 			show: isRunning
 		}
-		MbSwitch
-		{
-			id: ipForwardEnable
-			name: qsTr("IP forwarding")
-			bind: Utils.path( settingsPrefix, "/CustomArguments")
-			valueTrue: "--advertise-exit-node=true"
-			valueFalse: ""
-			writeAccessLevel: User.AccessInstaller
-			show: isEnabled
-		}
 		MbItemText
 		{
 			text: getState ()
@@ -107,12 +119,22 @@ MbPage
 		MbOK
 		{
 			id: logoutButton
-			description: qsTr("Disconnect from tailscale account")
+			description: qsTr("Account: ") + ( tailnetName == "" ? qsTr ("(unknown)") : tailnetName )
 			value: qsTr ("Logout")
 			onClicked: commandItem.setValue ('logout')
 			
 			writeAccessLevel: User.AccessInstaller
 			show: isConnected
+		}
+		MbSwitch
+		{
+			id: ipForwardEnable
+			name: qsTr("IP forwarding")
+			bind: Utils.path( settingsPrefix, "/CustomArguments")
+			valueTrue: "--advertise-exit-node=true"
+			valueFalse: ""
+			writeAccessLevel: User.AccessInstaller
+			show: isEnabled
 		}
 		MbEditBox
 		{

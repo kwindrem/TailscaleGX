@@ -1,0 +1,169 @@
+#!/bin/bash
+
+# script to authorize the GX device with tailscale
+#	intended as an alternative for getting login URL using copy/paste
+#	and to enter auth key and/or alternate login server with a keyboard
+
+while true ; do
+	echo "gathering tailscale information - wait"
+
+	state=$(dbus -y com.victronenergy.tailscaleGX /State GetValue 2> /dev/null )
+	if (( $? == 0 )); then
+		isRunning=true
+		loginLink=$( dbus -y com.victronenergy.tailscaleGX /LoginLink GetValue 2> /dev/null )
+			if (( $? == 0 )); then
+			loginLinkValid=true
+			loginLink=$( echo "$loginLink" | tr -d \')
+		else
+			loginLinkValid=false
+		fi
+	else
+		isRunning=true
+		loginLinkValid=false
+	fi
+	loginServer=$( dbus -y com.victronenergy.settings /Settings/Services/Tailscale/LoginServer GetValue 2> /dev/null )
+	if (( $? == 0 )); then
+		loginServerValid=true
+		loginServer=$( echo "$loginServer" | tr -d \')
+	else
+		loginServerValid=false
+	fi
+	authKey=$( dbus -y com.victronenergy.settings /Settings/Services/Tailscale/AuthKey GetValue 2> /dev/null )
+	if (( $? == 0 )); then
+		authKeyValid=true
+		authKey=$( echo "$authKey" | tr -d \')
+	else
+		authKeyValid=false
+	fi
+
+	echo
+
+	if ! $isRunning ; then
+		echo "TailscaleGX is not running"
+	elif [ "$state" == "0" ]; then
+		echo "unknown state $state - can't continue - exiting"
+		exit 2
+	elif [ "$state" == "1" ]; then
+			echo "tailscale starting up - wait"
+			continue
+	elif [ "$state" == "2" ]; then
+		echo "tailscaled not running - can't continue - exiting"
+		exit 3
+	elif [ "$state" == "3" ]; then
+		echo "tailscaled is stopped - wait"
+	elif [ "$state" == "4" ]; then
+		echo "tailscaled is logged out - wait"
+	elif [ "$state" == "99" ]; then
+		echo "initializing - wait"
+		continue
+	elif [ "$state" == "5" ]; then
+		echo "waiting for tailscale response - could be invalid auth key or loginServer"
+	elif [ "$state" == "6" ]; then
+		if [ "$loginLink" = "" ]; then
+			echo "waiting for login link from server"
+			continue
+		fi
+		echo "manual login required"
+		echo "    paste the following link into a web browser and follow instructions"
+		if [ "$loginServer" == "" ]; then
+			echo "    to connect this GX device to your tailscale account"
+		else
+			echo "    to connect this GX device to your account at $loginServer"
+		fi
+		echo
+		echo "$loginLink"
+		echo
+		read -p "run again (y/n)?: " response
+		if [ "$response" == "y" ] || [ "$response" == "Y" ]; then
+			continue
+		fi
+		
+	elif [ "$state" == "202" ]; then
+		echo "tailscale client is not running - can't continue"
+		exit 4
+	elif [ "$state" == "201" ]; then
+		echo "invalid auth key or login server"
+	elif [ "$state" == "100" ]; then
+		echo "the GX device is connected and server is accepting connections at"
+		hostName=$( dbus -y com.victronenergy.tailscaleGX /HostName GetValue 2> /dev/null )
+		ip1=$( dbus -y com.victronenergy.tailscaleGX /Ip1 GetValue 2> /dev/null )
+		ip2=$( dbus -y com.victronenergy.tailscaleGX /Ip2 GetValue 2> /dev/null )
+		tailnetName=$( dbus -y com.victronenergy.tailscaleGX /TailnetName GetValue 2> /dev/null )
+		expiry=$( dbus -y com.victronenergy.tailscaleGX /KeyExpiry GetValue 2> /dev/null )
+		echo "  $hostName  $ip1  $ip2"
+		echo "tailnet account: $tailnetName"
+		if [ "$expiry" != "" ]; then
+			echo "connection expires $expiry"
+		fi
+
+		read -p "logout (y/n)?: " response
+		if [ "$response" == "y" ] || [ "$response" == "Y" ]; then
+			dbus -y com.victronenergy.tailscaleGX /GuiCommand SetValue "logout" 2> /dev/null
+			continue
+		fi
+	fi
+
+	newServer=false
+	newAuthKey=false
+	echo
+	if $loginServerValid ;then
+		if [ "$loginServer" == "" ]; then
+			echo "login server: (tailscale)"
+		else
+			echo "login server: $loginServer"
+		fi
+		read -p "change login server (y/n)?: " response
+		if [ "$response" == "y" ] || [ "$response" == "Y" ]; then
+			read -p "enter new login server URL (cr for tailscale): " newServerUrl
+			newServer=true
+		fi
+	fi
+	if $authKeyValid ;then
+		if [ "$authKey" == "" ]; then
+			echo "authKey: (none)"
+		else
+			echo "authKey: $authKey"
+		fi
+		read -p "change auth key (y/n)?: " response
+		if [ "$response" == "y" ] || [ "$response" == "Y" ]; then
+			read -p "enter new auth key (cr for none): " newAuthKeyValue
+			newAuthKey=true
+		fi
+	fi
+
+	if $newServer ; then
+		if [ "$newServerUrl" == "" ]; then
+			echo "new login server: (tailscale)"
+		else
+			echo "new login server: $newServerUrl"
+		fi
+	fi
+	if $newAuthKey ; then
+		if [ "$newAuthKey" == "" ]; then
+			echo "new authKey: (none)"
+		elif $newAuthKey ; then
+			echo "new authKey: $newAuthKeyValue"
+		fi
+	fi
+	if $newServer || $newAuthKey ; then
+		echo "WARNING: if you are running this program via a tailscale connection"
+		echo "  you will be disconnected if you apply changes"
+		read -p "apply changes (y/n)?: " response
+		if [ "$response" == "y" ] || [ "$response" == "Y" ]; then
+			if $newServer ; then
+				dbus -y com.victronenergy.settings /Settings/Services/Tailscale/LoginServer SetValue "$newServerUrl" &> /dev/null
+			fi
+			if $newAuthKey ; then
+				dbus -y com.victronenergy.settings /Settings/Services/Tailscale/AuthKey SetValue "$newAuthKeyValue" &> /dev/null
+			fi
+			## always run again after making changes
+			echo "applying changes - wait"
+			sleep 3
+			continue
+		fi
+	fi
+	read -p "run again (y/n)?: " response
+	if [ "$response" != "y" ] && [ "$response" != "Y" ]; then
+		break
+	fi
+done

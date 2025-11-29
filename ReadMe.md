@@ -90,6 +90,34 @@ The same IP addresses will be used until you logout the GX device.
 If you wish to disconnect the GX device from the existing tailscale account,
 press the __Logout__ button. You can then log into a different account.
 
+Optional Authorization key and Alternate server may also be specified.
+These are described in more detail below.
+
+## Setup aids
+
+There are several tasks required to establish a tailscale connection
+that may be difficult when using the GX device UI:
+
+1. The login URL displayed on the GX device UI must be entered into a web browser.
+
+2. The optional auth key is very long and broken into 3 25-character entry fields in the UI.
+
+3. An optinoal alternate login server URL could also be long
+
+__authorizeTailscale__ is a shell script that can be run on the GX device via ssh
+that may simplify these tasks.
+
+1. The script prints the login URL which can be selected, copied and pasted into a web browser.
+
+2. The auth key can be copied from the tailscale key generator dialog then pasted when the script is asking for a new key.
+
+3. The same mechanism can be used for an alternate login server, or simply typed in using a keyboard
+
+In addition to this script, you may be able to use a cell phone or tablet camera to capture the login URL
+from the GX device screen. You may then be able to have it converted to text while pasting into an app.
+I tested this on an iPhone 16 running iOS 18, pasting into Notes.
+Selecting the text and copy/pasting into Safari successfully brought up the connect page.
+
 # IP Forwarding
 
 You may optionally share the tailnet connection with other devices on your local network.
@@ -129,6 +157,30 @@ dbus-spy to enter the key into
 Or use the command line interface:
 
 > dbus -y com.victronenergy.settings /Settings/Services/Tailscale/AuthKey SetValue [key]
+
+# Key expiration
+
+When creating an authorization key you must specify an expiration period (1 - 90 days).
+After an auth key expires,the GX device will remain connected but if logged out, a login will fail.
+So the longest lasting conneciton when using an auth key is 90 day !!
+
+A conneciton also has a "node key" expiration of 180 days. When a node key expires, the GX device *may*
+disconnect. If no valid auth key is active, the GX device will remain logged out
+and will need to repeat the login process described above from the GX device.
+You will not be able to connect via tailscale.
+
+Node key expiry can be disabled in the tailscale admin console.
+
+Node key expiry is displayed in the __accepting connections__ message if it has not been disabld
+
+Auth key expiry is **not** shown. Suggest setting a calendar appointment to generate a new auth key
+before the existing one expires and install the new one on the GX device.
+So you do not loose remote connections.
+
+For a connection that will persist forever, do not use an auth key and disable key expiry
+
+Note that if you log out the GX device and do not have an auth key set, you will need to log back in
+even if the node key has not expired.
 
 
 # Alternate login server

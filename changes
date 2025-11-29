@@ -1,3 +1,10 @@
+v2.4
+	improve recovery if tailscale client hangs
+	improve status gathering
+	add conneciton information: expiry (node key only), tailnet account
+	added shell script to aid configuraiton (see ReadMe.md)
+	update to tailscale v1.90
+
 v2.3:
 	add support for alternate login server (eg Headscale)
 	update to tailscale v1.88
