@@ -131,11 +131,13 @@ DbusService = None
 UNKNOWN_STATE = 0
 BACKEND_STARTING = 1
 BACKEND_NOT_RUNNING = 2
-STOPPED = 3
+CLIENT_STOPPED = 3
 LOGGED_OUT = 4
 WAIT_FOR_RESPONSE = 5
 CONNECT_WAIT = 6
 STATUS_TIMEOUT = 7
+CLIENT_STARTING = 8
+LOGIN_WAIT = 9
 CONNECTED = 100
 
 INIT = 99
@@ -168,6 +170,7 @@ loginServer = None
 loginServerUrl = None
 resetConnection = False
 restartBackend = False
+doLogout = False
 
 def mainLoop ():
 	global DbusSettings
@@ -185,6 +188,7 @@ def mainLoop ():
 	global loginServerUrl
 	global resetConnection
 	global restartBackend
+	global doLogout
 
 	startTime = time.time ()
 	if state == INIT:
@@ -232,8 +236,7 @@ def mainLoop ():
 		DbusService['/GuiCommand'] = ""
 		if guiCommand == 'logout':
 			logging.info ("logout command received from UI")
-			lastResponseTime = startTime
-			resetConnection = True
+			doLogout = True	
 
 	# check if loginServer has changed and is a valiid URL
 	newServer = DbusSettings ['loginServer'].strip() # remove accidental spaces
@@ -316,8 +319,9 @@ def mainLoop ():
 			if exitCode != 0:
 				logging.error ( "restart TailscaleGX failed " + str (exitCode) )
 			else:
-				time.sleep (0.2)
-				backendRunning = False
+				# send kill too in case the process is hung
+				sendCommand ( [ 'svc', '-k', "/service/TailscaleGX-backend"] )
+				time.sleep (0.5)
 				_, _, exitCode = sendCommand ( [ 'svc', '-u', "/service/TailscaleGX-backend"] )
 				if exitCode != 0:
 					logging.error ( "restart TailscaleGX failed " + str (exitCode) )
@@ -337,7 +341,6 @@ def mainLoop ():
 		_, _, exitCode = sendCommand ( [ 'svc', '-d', "/service/TailscaleGX-backend"] )
 		if exitCode != 0:
 			logging.error ( "stop TailscaleGX failed " + str (exitCode) )
-		backendRunning = False
 
 	if not backendRunning:
 		if state != BACKEND_STARTING:
@@ -355,41 +358,53 @@ def mainLoop ():
 			try:
 				status = json.loads (stdout)
 				backendState = status["BackendState"]
-				if backendState == "NeedsLogin":
-					authUrl = status["AuthURL"]
-					if state != CONNECT_WAIT and state != WAIT_FOR_RESPONSE:
-						state = LOGGED_OUT
-				elif backendState == "Running":
-					state = CONNECTED
-					thisHostName = status["Self"]["HostName"]
-					ip1 = status["Self"]["TailscaleIPs"][0]
-					ip2 = status["Self"]["TailscaleIPs"][1]
-					keyExpiry = status["Self"]["KeyExpiry"]
-					tailnetName = status["Self"]["CapMap"]["tailnet-display-name"][0]
-				elif backendState == "Stopped":
-					state = STOPPED
-				else:
-					logging.warning ("Unprocessed backendState " + str (backendState) )
-
-			# ignore invalid json keys silently
-			except KeyError as ex:
-				#### DEBUG logging.error ("#### invalid parameter " + str (ex) + " -- skipping")
-				pass
-
 			except Exception as ex:
 				logging.error ("Status message json parsing error: ", str (ex.args) )
+				backendState = ""
 				state = WAIT_FOR_RESPONSE
-
+			if backendState == "NeedsLogin":
+				try:
+					authUrl = status["AuthURL"]
+				except: pass
+				if state != CONNECT_WAIT and state != LOGIN_WAIT:
+					state = LOGGED_OUT
+			elif backendState == "Running":
+				state = CONNECTED
+				try:
+					selfBlock = status["Self"]
+					try:
+						thisHostName = selfBlock["HostName"]
+					except: pass
+					try:
+						ips = selfBlock["TailscaleIPs"]
+						ip1 = ips[0]
+						ip2 = ips[1]
+					except: pass
+					try:
+						tailnetName = selfBlock["CapMap"]["tailnet-display-name"][0]
+					except: pass
+					try:
+						keyExpiry = selfBlock["KeyExpiry"]
+					except: pass
+				except: pass
+			elif backendState == "Stopped":
+				state = CLIENT_STOPPED
+			elif backendState == "Starting":
+				state = CLIENT_STARTING
+			elif backendState == "NoState":
+				state = STATUS_TIMEOUT
+			else:
+				logging.warning ("Unprocessed backendState " + backendState)
 		else:
 			logging.error ("Error reading status", exitCode)
 			state = WAIT_FOR_RESPONSE
 
 		# no timeout currently occurring - update delay
-		if state != WAIT_FOR_RESPONSE and state != STATUS_TIMEOUT:
+		if state != WAIT_FOR_RESPONSE and state != STATUS_TIMEOUT and state != CONNECT_WAIT:
 			lastResponseTime = startTime
 			uiStateOveride = UNKNOWN_STATE
 		# delay expired - log results and trigger connection reset
-		elif lastResponseTime != 0 and startTime - lastResponseTime > 10: #### DEBUG 30:
+		elif lastResponseTime != 0 and startTime - lastResponseTime > 30:
 			lastResponseTime = startTime	# reset timer so next error report is spaced by the timer
 			if state == STATUS_TIMEOUT:
 				uiStateOveride = CLIENT_ERROR
@@ -423,8 +438,19 @@ def mainLoop ():
 		#	or if UI triggers a logout or there is a timeout while waiting to connect
 		#	there is no need to log out since a login would follow anyway
 		#	and an exising connection won't survive the login
+		
+		# doLogout is set when the logout command is received from the UI
 	
-		if resetConnection or state == LOGGED_OUT or state == STOPPED:
+		if doLogout and backendRunning:	
+			logging.info ("logging out of tailscale" )
+			_, stderr, exitCode = sendCommand ( [ tsControlCmd, 'logout' ] )
+			if exitCode != 0:
+				logging.error ( "tailscale logout failed " + str (exitCode) )
+				logging.error (stderr)
+			else:
+				state = LOGGED_OUT
+			doLogout = False
+		if resetConnection or state == LOGGED_OUT or state == CLIENT_STOPPED:
 			if resetConnection:
 				resetConnection = False
 				if authKey == "":
@@ -440,11 +466,10 @@ def mainLoop ():
 				logging.error ( "tailscale login failed " + str (exitCode) )
 				logging.error (stderr)
 			elif authKey == "":
-				state = CONNECT_WAIT
+				state = LOGIN_WAIT
 			else:
-				state = WAIT_FOR_RESPONSE
+				state = CONNECT_WAIT
 	# end if backendRunning
-
 
 	# show IP addresses only if connected
 	if state == CONNECTED:
@@ -464,13 +489,15 @@ def mainLoop ():
 	# update dbus values regardless of state of the link
 	if uiStateOveride != UNKNOWN_STATE:
 		DbusService['/State'] = uiStateOveride
+	elif doLogout:
+		DbusService['/State'] = LOGGED_OUT
 	else:
 		DbusService['/State'] = state
 	DbusService['/LoginLink'] = authUrl
 	DbusService['/LoginServerUrl'] = loginServerUrl
 
 	previousState = state
-	#### TODO: enable for testing
+	#### DEBUG: enable to measure/display loop time
 	#### endTime = time.time ()
 	#### print ("main loop time %3.1f mS" % ( (endTime - startTime) * 1000 ))
 	return True

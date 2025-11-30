@@ -32,7 +32,7 @@ MbPage
 	
 	property bool isRunning: stateItem.valid
 	property bool isEnabled: enable.checked && isRunning
-	property bool isConnected: state == 100 && isEnabled
+	property bool isConnected: state == 100 && isEnabled	// CONNECTED
 
 	VBusItem { id: authKeyItem; bind: Utils.path(settingsPrefix, "/AuthKey") }
 	property string authKey: authKeyItem.valid ? authKeyItem.value : ""
@@ -55,35 +55,33 @@ MbPage
 	
 	function getState ()
 	{
-		if ( ! isRunning )
-			return qsTr ("TailscaleGX control not running")
-		else if ( ! isEnabled )
+		if ( ! isEnabled )
 			return qsTr ("remote connections not accepted\n(disabled above)")
-		else if ( isConnected )
+		else if ( ! isRunning )
+			return qsTr ("TailscaleGX control not running")
+		else if ( isConnected )	// state == CONNECTED && isEnabled
 			return ( qsTr ("accepting remote connections at:\n")
 					+ hostName + "\n" + ip1 + "\n" + ip2 + "\n" + getExpiry () )
-		else if ( state == 0 )
-			return ""
-		else if ( state == 1 )
-			return qsTr ("starting ...")
-		else if ( state == 2 )
-			return qsTr ("tailscale starting ...")
-		else if ( state == 3)
-			return qsTr ("tailscale stopped")
-		else if ( state == 4)
+		else if ( state == 1 || state == 2)	// BACKEND_STARTING || BACKEND_NOT_RUNNING
+			return qsTr ("TailscaleGX starting ...")
+		else if ( state == 3)	// CLIENT_STOPPED
+			return qsTr ("tailscale client stopped")
+		else if ( state == 4)	// LOGGED_OUT
 			return qsTr ("this GX device is logged out of tailscale")
-		else if ( state == 5 || ( state == 6 && loginLink == "" ) )
+		else if ( state == 5 || ( state == 6 ) )	// WAIT_FOR_RESPONSE || CONNECT_WAIT
 		{
 			if (loginServerUrl == "")
 				return qsTr ("waiting for a response from tailscale server")
 			else
 				return qsTr ("waiting for a response from login server\n" + loginServerUrl)
 		}
-		else if ( state == 6)
+		else if (state == 9)	// LOGIN_WAIT
 				return ( qsTr ("connect this GX device to your account at:\n\n") + loginLink)
-		else if ( state == 7)
+		else if (state == 7)	// STATUS_TIMEOUT
 			return ( qsTr ("waiting for response from tailscale client") )
-		else if ( state == 201 )
+		else if (state == 8)	// CLIENT_STARTING
+			return ( qsTr ("logging in to server ...") )
+		else if ( state == 201 )	// SERVER_ERROR
 		{
 			if (loginServerUrl != "" && authKey != "")
 				return ( qsTr ("server timeout - check login server URL and auth key") )
@@ -94,8 +92,12 @@ MbPage
 			else
 				return ( qsTr ("server timeout"))
 		}
-		else if ( state == 202 )
+		else if ( state == 202 )	// CLIENT_ERROR
 			return ( qsTr ("tailscale client not responding") )
+		else if ( state == 99 )	// INIT
+			return qsTr (" Tailscale control initializing")
+		else if ( state == 0 )	// UNKNOWN_STATE
+			return ""
 		else
 			return ( qsTr ( "unknown state " ) + state )
 	}

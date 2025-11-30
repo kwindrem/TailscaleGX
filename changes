@@ -1,3 +1,6 @@
+v2.5:
+	more improvements to client/server connection recovery
+
 v2.4
 	improve recovery if tailscale client hangs
 	improve status gathering
