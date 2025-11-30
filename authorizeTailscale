@@ -36,29 +36,36 @@ while true ; do
 		authKeyValid=false
 	fi
 
-	echo
-
 	if ! $isRunning ; then
 		echo "TailscaleGX is not running"
-	elif [ "$state" == "0" ]; then
+	elif [ "$state" == "0" ]; then		# UNKNOWN_STATE
 		echo "unknown state $state - can't continue - exiting"
 		exit 2
-	elif [ "$state" == "1" ]; then
+	elif [ "$state" == "1" ]; then		# BACKEND_STARTING
 			echo "tailscale starting up - wait"
 			continue
-	elif [ "$state" == "2" ]; then
+	elif [ "$state" == "2" ]; then		# BACKEND_NOT_RUNNING
 		echo "tailscaled not running - can't continue - exiting"
 		exit 3
-	elif [ "$state" == "3" ]; then
+	elif [ "$state" == "3" ]; then		# CLIENT_STOPPED
 		echo "tailscaled is stopped - wait"
-	elif [ "$state" == "4" ]; then
+		continue
+	elif [ "$state" == "4" ]; then		# LOGGED_OUT
 		echo "tailscaled is logged out - wait"
-	elif [ "$state" == "99" ]; then
+		continue
+	elif [ "$state" == "99" ]; then		# INIT
 		echo "initializing - wait"
 		continue
-	elif [ "$state" == "5" ]; then
+	elif [ "$state" == "5" ]; then		# WAIT_FOR_RESPONSE
 		echo "waiting for tailscale response - could be invalid auth key or loginServer"
-	elif [ "$state" == "6" ]; then
+	elif [ "$state" == "10" ]; then		# IN_USE
+		echo "already looged in to another tailnet"
+	elif [ "$state" == "11" ]; then
+		echo "authorization required - visit admin console"
+	elif [ "$state" == "6" ]; then		# CONNECT_WAIT
+		echo "waiting for tailscale response"
+		continue
+	elif [ "$state" == "9" ]; then		# LOGIN_WAIT
 		if [ "$loginLink" = "" ]; then
 			echo "waiting for login link from server"
 			continue

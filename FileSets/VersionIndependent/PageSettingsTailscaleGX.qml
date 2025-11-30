@@ -96,6 +96,10 @@ MbPage
 			return ( qsTr ("tailscale client not responding") )
 		else if ( state == 99 )	// INIT
 			return qsTr (" Tailscale control initializing")
+		else if ( state == 10 )	// IN_USE
+			return ( qsTr ("can not connect\nmay be connected to another tailnet") )
+		else if ( state == 11 )	// MACH_AUTH
+			return ( qsTr ("needs authorization\nvisit server admin console") )
 		else if ( state == 0 )	// UNKNOWN_STATE
 			return ""
 		else

@@ -138,6 +138,8 @@ CONNECT_WAIT = 6
 STATUS_TIMEOUT = 7
 CLIENT_STARTING = 8
 LOGIN_WAIT = 9
+IN_USE = 10
+MACH_AUTH = 11
 CONNECTED = 100
 
 INIT = 99
@@ -393,6 +395,10 @@ def mainLoop ():
 				state = CLIENT_STARTING
 			elif backendState == "NoState":
 				state = STATUS_TIMEOUT
+			elif backendState == "InUseOtherUser":
+				state = IN_USE
+			elif backendState == "NeedsMachineAuth":
+				state = MACH_AUTH
 			else:
 				logging.warning ("Unprocessed backendState " + backendState)
 		else:
