@@ -31,7 +31,7 @@ MbPage
 	property string loginLink: loginItem.valid ? loginItem.value : ""
 	
 	property bool isRunning: stateItem.valid
-	property bool isEnabled: enable.checked && isRunning
+	property bool isEnabled: enable.checked
 	property bool isConnected: state == 100 && isEnabled	// CONNECTED
 
 	VBusItem { id: authKeyItem; bind: Utils.path(settingsPrefix, "/AuthKey") }
@@ -59,6 +59,10 @@ MbPage
 			return qsTr ("remote connections not accepted\n(disabled above)")
 		else if ( ! isRunning )
 			return qsTr ("TailscaleGX control not running")
+		else if (state == 12)	// NETWORK_DOWN
+			return ( qsTr ("login server not reachable - check")
+			+ ( loginServerUrl != "" ? ( qsTr ("\nlogin server URL: ") + loginServerUrl ) : "" ) 
+			+ qsTr ("\nand internet connection") )
 		else if ( isConnected )	// state == CONNECTED && isEnabled
 			return ( qsTr ("accepting remote connections at:\n")
 					+ hostName + "\n" + ip1 + "\n" + ip2 + "\n" + getExpiry () )

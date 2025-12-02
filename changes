@@ -1,4 +1,7 @@
-v26:
+v2.7:
+	more enhancements to conneciton recovery including network up/down
+
+v2.6:
 	fixed: authorizeTailescale not showing login URL
 	added additional states of the tailscale client
 

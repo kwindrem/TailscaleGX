@@ -118,6 +118,20 @@ from the GX device screen. You may then be able to have it converted to text whi
 I tested this on an iPhone 16 running iOS 18, pasting into Notes.
 Selecting the text and copy/pasting into Safari successfully brought up the connect page.
 
+# DNS issue
+
+I experienced a one-time issue with DNS resolution failures.
+I discovered a corrupted /etc/resolv.conf.
+tailscaled modifies this file at connection startup and restores on connection shutdown
+and it is possible a tailscaled (TailscaleGX-backend) crash resulted in the corruption.
+
+v2.7 checks for network connection which will fail if this corruption occurs.
+A login server unreachable message is displayed on the UI and "login server is NOT responding"
+message is shown in the log.
+
+The solution is to reinstall venus OS. Do this by switching the the backup firmware then using
+an online install to update to the current version.
+
 # IP Forwarding
 
 You may optionally share the tailnet connection with other devices on your local network.

@@ -140,6 +140,7 @@ CLIENT_STARTING = 8
 LOGIN_WAIT = 9
 IN_USE = 10
 MACH_AUTH = 11
+NETWORK_DOWN = 12
 CONNECTED = 100
 
 INIT = 99
@@ -152,18 +153,18 @@ global state
 global systemNameObj
 global systemName
 global hostName
-global lastIpForwardingEnabled
 global loginServer
 global loginServerUrl
 global resetConnection
 global restartBackend
+global serverReached
+global lastPingTime
 
 previousState = INIT
 state = INIT
 systemNameObj = None
 systemName = None
 hostName = None
-lastIpForwardingEnabled = False
 authKey = None
 lastResponseTime = 0
 uiStateOveride = UNKNOWN_STATE
@@ -172,7 +173,9 @@ loginServer = None
 loginServerUrl = None
 resetConnection = False
 restartBackend = False
+serverReached = False
 doLogout = False
+lastPingTime = 0
 
 def mainLoop ():
 	global DbusSettings
@@ -181,7 +184,6 @@ def mainLoop ():
 	global state
 	global systemName
 	global hostName
-	global lastIpForwardingEnabled
 	global authKey
 	global lastResponseTime
 	global uiStateOveride
@@ -191,10 +193,13 @@ def mainLoop ():
 	global resetConnection
 	global restartBackend
 	global doLogout
+	global serverReached
+	global lastPingTime
 
 	startTime = time.time ()
 	if state == INIT:
 		lastResponseTime = startTime
+		lastPingTime = startTime
 		restartBackend = False
 		uiStateOveride = UNKNOWN_STATE
 
@@ -251,7 +256,6 @@ def mainLoop ():
 		if loginServer != "":
 			if not (loginServerUrl.startswith("https://") or loginServerUrl.startswith("http://")):
 				loginServerUrl = f"https://{loginServer}"
-			
 			parsed = urlparse(loginServerUrl)
 			if not (parsed.scheme in ['http', 'https'] and parsed.netloc != ""):
 				logging.error ("invalid login server: " + loginServerUrl)
@@ -260,7 +264,6 @@ def mainLoop ():
 			logging.info ("using login server: " + loginServerUrl)
 		else:
 			logging.info ("using tailscale's login server")
-		uiStateOveride = UNKNOWN_STATE
 		if state != INIT:
 			resetConnection = True
 
@@ -273,7 +276,6 @@ def mainLoop ():
 			logging.info ("using auth key: " + authKey)
 		else:
 			logging.info ("auth key disabled - must login at login server")
-		uiStateOveride = UNKNOWN_STATE
 		if state != INIT:
 			resetConnection = True
 
@@ -290,62 +292,49 @@ def mainLoop ():
 	else:
 		ipForwardingEnabled = False
 
-	# update IP forwarding and exit-node enable
-	if ipForwardingEnabled != lastIpForwardingEnabled:
-		lastIpForwardingEnabled = ipForwardingEnabled
-		if ipForwardingEnabled:
-			logging.info ("IP forwarding enabled")
-			enabled = '1'
-			enabled2 = "true"
-		else:
-			logging.info ("IP forwarding disabled")
-			enabled = '0'
-			enabled2 = "false"
-		_, _, exitCode = sendCommand ( [ 'sysctl', '-w', "net.ipv4.ip_forward=" + enabled ] )
-		if exitCode != 0:
-			logging.error ( "could not change IP v4 forwarding state to " + enabled + " " + str (exitCode) )
-		_, _, exitCode = sendCommand ( [ 'sysctl', '-w', "net.ipv6.conf.all.forwarding=" + enabled ] )
-		if exitCode != 0:
-			logging.error ( "could not change IP v6 forwarding state to " + enabled + " " + str (exitCode) )
-		_, _, exitCode = sendCommand ( [ tsControlCmd, 'set', "--advertise-exit-node=" + enabled2 ] )
-		if exitCode != 0:
-			logging.error ( "could not change tailscale exit-node setting to " + enabled2 + " " + str (exitCode) )
-
-	# start backend
+	# check to see if network is up before enabling tailscale
 	if tailscaleEnabled:
-		if restartBackend:
-			logging.info ("restarting TailscaleGX-backend")
-			# use separate down, then up command rather than -t
-			#	because the service starts could be down and -t won't start it if so
-			_, _, exitCode = sendCommand ( [ 'svc', '-d', "/service/TailscaleGX-backend"] )
-			if exitCode != 0:
-				logging.error ( "restart TailscaleGX failed " + str (exitCode) )
-			else:
-				# send kill too in case the process is hung
-				sendCommand ( [ 'svc', '-k', "/service/TailscaleGX-backend"] )
-				time.sleep (0.5)
-				_, _, exitCode = sendCommand ( [ 'svc', '-u', "/service/TailscaleGX-backend"] )
-				if exitCode != 0:
-					logging.error ( "restart TailscaleGX failed " + str (exitCode) )
-				else:
-					state = BACKEND_STARTING
-			restartBackend = False
-		elif not backendRunning and state != BACKEND_STARTING:
-			logging.info ("starting TailscaleGX-backend")
-			_, _, exitCode = sendCommand ( [ 'svc', '-u', "/service/TailscaleGX-backend"] )
-			if exitCode != 0:
-				logging.error ( "start TailscaleGX failed " + str (exitCode) )
-			else:
-				state = BACKEND_STARTING
+		if loginServer == "":
+			pingAddress = "tailscale.com"
+		else:
+			pingAddress = loginServer
+		_, stderr, errorCode = sendCommand ( [ 'ping', '-c1', pingAddress ], timeout = 1.0 )
+		if errorCode == 0:
+			lastPingTime = startTime
+			if not serverReached:
+				logging.info ("login server is responding")
+				serverReached = True
+		# wait a while before a missed ping triggers actions
+		elif startTime > lastPingTime + 5:
+			if serverReached:
+				logging.info ("login server is NOT responding")
+			serverReached = False
+			state = NETWORK_DOWN
+	else:
+		serverReached = False
+
 	# stop backend
-	elif not tailscaleEnabled and backendRunning:
+	if restartBackend or ( not serverReached and backendRunning ) :
 		logging.info ("stopping TailscaleGX-backend")
 		_, _, exitCode = sendCommand ( [ 'svc', '-d', "/service/TailscaleGX-backend"] )
 		if exitCode != 0:
 			logging.error ( "stop TailscaleGX failed " + str (exitCode) )
+		if state != NETWORK_DOWN:
+			state = BACKEND_NOT_RUNNING
+		backendRunning = False
+		restartBackend = False
+
+	# start backend
+	if serverReached and not backendRunning and state != BACKEND_STARTING:
+		logging.info ("starting TailscaleGX-backend")
+		_, _, exitCode = sendCommand ( [ 'svc', '-u', "/service/TailscaleGX-backend"] )
+		if exitCode != 0:
+			logging.error ( "start TailscaleGX failed " + str (exitCode) )
+		else:
+			state = BACKEND_STARTING
 
 	if not backendRunning:
-		if state != BACKEND_STARTING:
+		if state != BACKEND_STARTING and state != NETWORK_DOWN:
 			state = BACKEND_NOT_RUNNING
 		# update delay to prevent reporting an immediate no response when backend begins
 		lastResponseTime = startTime
@@ -459,6 +448,7 @@ def mainLoop ():
 		if resetConnection or state == LOGGED_OUT or state == CLIENT_STOPPED:
 			if resetConnection:
 				resetConnection = False
+				uiStateOveride = False
 				if authKey == "":
 					logging.info ("resetting conneciton - must reconnect manually")
 				else:
@@ -476,6 +466,31 @@ def mainLoop ():
 			else:
 				state = CONNECT_WAIT
 	# end if backendRunning
+
+	# update IP forwarding, exit-node enable - can't do until backend is running
+	if state != previousState:
+		# enable IP forwarding
+		if ipForwardingEnabled and state == CONNECTED:
+			logging.info ("IP forwarding enabled")
+			enabled = '1'
+			enabled2 = "true"
+		# disable IP forwarding - do sysctl part ASAP
+		else:
+			logging.info ("IP forwarding disabled")
+			enabled = '0'
+			enabled2 = "false"
+		_, _, exitCode = sendCommand ( [ 'sysctl', '-w', "net.ipv4.ip_forward=" + enabled ] )
+		if exitCode != 0:
+			logging.error ( "could not change IP v4 forwarding state to " + enabled + " " + str (exitCode) )
+		_, _, exitCode = sendCommand ( [ 'sysctl', '-w', "net.ipv6.conf.all.forwarding=" + enabled ] )
+		if exitCode != 0:
+			logging.error ( "could not change IP v6 forwarding state to " + enabled + " " + str (exitCode) )
+
+		# do tailscale set after backend is running
+		if backendRunning:
+			_, _, exitCode = sendCommand ( [ tsControlCmd, 'set', "--advertise-exit-node=" + enabled2 ] )
+			if exitCode != 0:
+				logging.error ( "could not change tailscale exit-node setting to " + enabled2 + " " + str (exitCode) )
 
 	# show IP addresses only if connected
 	if state == CONNECTED:
@@ -504,8 +519,8 @@ def mainLoop ():
 
 	previousState = state
 	#### DEBUG: enable to measure/display loop time
-	#### endTime = time.time ()
-	#### print ("main loop time %3.1f mS" % ( (endTime - startTime) * 1000 ))
+	## endTime = time.time ()
+	## print ("main loop time %3.1f mS" % ( (endTime - startTime) * 1000 ))
 	return True
 
 def main():
@@ -536,48 +551,14 @@ def main():
 	DBusGMainLoop(set_as_default=True)
 
 	theBus = dbus.SystemBus()
-	dbusSettingsPath = "com.victronenergy.settings"
 
 	settingsList =	{ 'enabled': [ '/Settings/Services/Tailscale/Enabled', 0, 0, 1 ],
 					  'customArguements': [ '/Settings/Services/Tailscale/CustomArguments', "", 0, 0 ],
 					  'authKey' :  [ '/Settings/Services/Tailscale/AuthKey', "", 0, 0 ],
-					  'loginServer': [ '/Settings/Services/Tailscale/LoginServer', "", 0, 0 ]
+					  'loginServer': [ '/Settings/Services/Tailscale/LoginServer', "", 0, 0 ],
 					}
 	DbusSettings = SettingsDevice(bus=theBus, supportedSettings=settingsList,
 					timeout = 30, eventCallback=None )
-
-	# migrate settings and tailscale state directory
-	removeSettings = False
-	try:
-		oldSettingObj = theBus.get_object (dbusSettingsPath, "/Settings/TailscaleGX/Enabled")
-		oldSetting=oldSettingObj.GetValue()
-		logging.warning ( "moving enabled setting to new location and removing old loction" )
-		DbusSettings['enabled'] = oldSetting
-		removeSettings = True
-	except:
-		pass
-	try:
-		oldSettingObj = theBus.get_object (dbusSettingsPath, "/Settings/TailscaleGX/IpForwarding")
-		oldSetting=oldSettingObj.GetValue()
-		logging.warning ( "moving IP forwarding setting to new location and removing old loction" )
-		if oldSetting:
-			DbusSettings['customArguements'] = "--advertise-exit-node=true"
-		else:
-			DbusSettings['customArguements'] = ""
-		removeSettings = True
-	except:
-		pass
-
-	# remove old settings
-	if removeSettings:
-		settingsToRemove = '%[ "' + "/Settings/TailscaleGX/Enabled" + '" , "' + "/Settings/TailscaleGX/IpForwarding" + '" ]'
-		sendCommand ( ['dbus', '-y', 'com.victronenergy.settings', '/', 'RemoveSettings', settingsToRemove  ] )
-
-	stockTailscaleStateDir = "/data/conf/tailscale"
-	oldStateDir = "/data/setupOptions/TailscaleGX/state"
-	if os.path.exists ( oldStateDir ) and not os.path.exists ( stockTailscaleStateDir ):
-		logging.warning ( "moving tailscale state to new location" )
-		shutil.move ( oldStateDir, stockTailscaleStateDir )
 
 	if os.path.exists ("/opt/victronenergy/tailscale"):
 		logging.warning ("tailscale is now part of stock firmware - TailscaleGX-control no longer used - exiting")
@@ -605,7 +586,7 @@ def main():
 	DbusService.register ()
 
 
-	systemNameObj = theBus.get_object (dbusSettingsPath, "/Settings/SystemSetup/SystemName")
+	systemNameObj = theBus.get_object ("com.victronenergy.settings", "/Settings/SystemSetup/SystemName")
 
 	# call the main loop - every 1 second
 	# this section of code loops until mainloop quits
