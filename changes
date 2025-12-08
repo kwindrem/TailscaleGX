@@ -1,3 +1,11 @@
+v2.8:
+	fixed: continuous connection resets with alternate login server
+		replaced alive check with online status check
+	more enhancments to connection recovery and status on UI
+	update to tailscale v1.92
+	fixed: invalid escape sequence '\['
+		(warning only - host name was processed properly)
+
 v2.7:
 	more enhancements to conneciton recovery including network up/down
 

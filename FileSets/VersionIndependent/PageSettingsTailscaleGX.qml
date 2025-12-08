@@ -59,10 +59,8 @@ MbPage
 			return qsTr ("remote connections not accepted\n(disabled above)")
 		else if ( ! isRunning )
 			return qsTr ("TailscaleGX control not running")
-		else if (state == 12)	// NETWORK_DOWN
-			return ( qsTr ("login server not reachable - check")
-			+ ( loginServerUrl != "" ? ( qsTr ("\nlogin server URL: ") + loginServerUrl ) : "" ) 
-			+ qsTr ("\nand internet connection") )
+		else if (state == 12)	// OFF_LINE
+			return ( qsTr ("tailscale connection off line\ncheck internet connection") )
 		else if ( isConnected )	// state == CONNECTED && isEnabled
 			return ( qsTr ("accepting remote connections at:\n")
 					+ hostName + "\n" + ip1 + "\n" + ip2 + "\n" + getExpiry () )
@@ -75,29 +73,48 @@ MbPage
 		else if ( state == 5 || ( state == 6 ) )	// WAIT_FOR_RESPONSE || CONNECT_WAIT
 		{
 			if (loginServerUrl == "")
-				return qsTr ("waiting for a response from tailscale server")
+				return qsTr ("waiting for response from tailscale server")
 			else
-				return qsTr ("waiting for a response from login server\n" + loginServerUrl)
+				return qsTr ("waiting for response from login server\n" + loginServerUrl)
 		}
 		else if (state == 9)	// LOGIN_WAIT
+		{
+			if (loginLink == "")
+			{
+				if (loginServerUrl == "")
+					return qsTr ("waiting for response from tailscale server")
+				else
+					return qsTr ("waiting for response from login server\n" + loginServerUrl)
+			}
+			else
 				return ( qsTr ("connect this GX device to your account at:\n\n") + loginLink)
-		else if (state == 7)	// STATUS_TIMEOUT
+		}
+		else if (state == 7 || state == 13)	// STATUS_TIMEOUT || NO_BACKEND_STATE
 			return ( qsTr ("waiting for response from tailscale client") )
 		else if (state == 8)	// CLIENT_STARTING
 			return ( qsTr ("logging in to server ...") )
 		else if ( state == 201 )	// SERVER_ERROR
 		{
 			if (loginServerUrl != "" && authKey != "")
-				return ( qsTr ("server timeout - check login server URL and auth key") )
+				return ( qsTr ("tailscale server not responding\ncheck internet connetion\login server URL and auth key") )
 			else if (loginServerUrl != "")
-				return ( qsTr ("server timeout - check login server URL") )
+				return ( qsTr ("tailscale server not responding\ncheck internet connetion\and login server URL") )
 			else if (authKey != "")
-				return ( qsTr ("server timeout - check auth key"))
+				return ( qsTr ("tailscale server not responding\ncheck internet connetion\ and auth key"))
 			else
-				return ( qsTr ("server timeout"))
+				return ( qsTr ("tailscale server not responding\ncheck internet connetion"))
 		}
 		else if ( state == 202 )	// CLIENT_ERROR
+			return ( qsTr ("tailscale client can't connect\ncheck internet connection") )
+		else if ( state == 203 )	// CLIENT_TIMEOUT
 			return ( qsTr ("tailscale client not responding") )
+		else if ( state == 204 )	// LOGIN_FAIL
+		{
+			if (loginServerUrl != "")
+				return ( qsTr ("login server timeout\ncheck login server URL\n") + loginServerUrl + qsTr ("\nor internet connection") )
+			else
+				return ( qsTr ("tailscale login server timeout\ncheck internet connection"))
+		}
 		else if ( state == 99 )	// INIT
 			return qsTr (" Tailscale control initializing")
 		else if ( state == 10 )	// IN_USE

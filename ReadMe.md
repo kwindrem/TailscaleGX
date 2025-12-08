@@ -118,6 +118,13 @@ from the GX device screen. You may then be able to have it converted to text whi
 I tested this on an iPhone 16 running iOS 18, pasting into Notes.
 Selecting the text and copy/pasting into Safari successfully brought up the connect page.
 
+# Troubleshooting
+
+Prompts on the UI may help to isolate issues with a connection.
+
+If for some re
+
+
 # DNS issue
 
 I experienced a one-time issue with DNS resolution failures.
