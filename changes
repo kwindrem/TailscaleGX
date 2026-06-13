@@ -1,3 +1,8 @@
+v3.0:
+	add manual update to latest stable version of tailscale client
+	this binary is the full version, not the stripped down version
+		included with TailscaleGX and is also much larger
+
 v2.8:
 	fixed: continuous connection resets with alternate login server
 		replaced alive check with online status check

@@ -21,6 +21,9 @@ MbPage
 	VBusItem { id: commandItem; bind: Utils.path(servicePrefix, "/GuiCommand") }
 	VBusItem { id: enabledItem; bind: Utils.path(settingsPrefix, "/Enabled") }
 	VBusItem { id: customArgumentsItem; bind: Utils.path(settingsPrefix, "/CustomArguments") }
+	VBusItem { id: clientVersionItem; bind: Utils.path(servicePrefix, "/TailscaleClientVersion") }
+	VBusItem { id: availableVersionItem; bind: Utils.path(servicePrefix, "/TailscaleAvailableVersion") }
+	property string availableVersion: availableVersionItem.valid ? availableVersionItem.value : ""
 
 	property int state: stateItem.valid ? stateItem.value : 0
 	property string ip1: ip1Item.valid ? ip1Item.value : ""
@@ -123,6 +126,16 @@ MbPage
 			return ( qsTr ("needs authorization\nvisit server admin console") )
 		else if ( state == 0 )	// UNKNOWN_STATE
 			return ""
+
+		else if ( state == 21 )	// CLIENT_UPDATING
+			return qsTr ("Updating tailscale client ...")
+		else if ( state == 22 )	// CLIENT_NO_UPDATE_NEEDED
+			return qsTr ("tailscale client already up to date")
+		else if ( state == 23 )	// CLIENT_UPDATE_SUCCESS
+			return qsTr ("tailscale client updated")
+		else if ( state == 29 )	// CLIENT_UPDATE_FAIL
+			return qsTr ("tailscale client update FAILED - check network")
+
 		else
 			return ( qsTr ( "unknown state " ) + state )
 	}
@@ -149,9 +162,17 @@ MbPage
 			description: qsTr("Account: ") + ( tailnetName == "" ? qsTr ("(unknown)") : tailnetName )
 			value: qsTr ("Logout")
 			onClicked: commandItem.setValue ('logout')
-			
 			writeAccessLevel: User.AccessInstaller
 			show: isConnected
+		}
+		MbOK
+		{
+			id: clientUpdateButton
+			description: qsTr("Tailscale client version: ") + ( clientVersionItem.value )
+			value: availableVersion != "" ? qsTr ("Update to " + availableVersion) : qsTr ("no update available")
+			onClicked: commandItem.setValue ('clientUpdate')
+			writeAccessLevel: User.AccessInstaller
+			enabled: availableVersion != ""
 		}
 		MbSwitch
 		{

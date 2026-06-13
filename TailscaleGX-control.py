@@ -144,6 +144,11 @@ MACH_AUTH = 11
 OFF_LINE = 12
 NO_BACKEND_STATE = 13
 
+CLIENT_UPDATING = 21
+CLIENT_NO_UPDATE_NEEDED = 22
+CLIENT_UPDATE_SUCCESS = 23
+CLIENT_UPDATE_FAIL = 29
+
 CONNECTED = 100
 
 INIT = 99
@@ -179,6 +184,7 @@ loginServerUrl = None
 resetConnection = False
 restartBackend = False
 doLogout = False
+doClientUpdate = False
 wasIpForwarding = False
 endTailscaleControl = False
 lastConnectedTime = 0
@@ -198,6 +204,7 @@ def mainLoop ():
 	global resetConnection
 	global restartBackend
 	global doLogout
+	global doClientUpdate
 	global wasIpForwarding
 	global endTailscaleControl
 	global mainloop
@@ -223,6 +230,8 @@ def mainLoop ():
 	ip2 = ""
 	keyExpiry = ""
 	tailnetName = ""
+	clientVersion = ""
+	availableVersion = ""
 
 	# see if backend is running
 	stdout, _, _ = sendCommand ( [ 'svstat', "/service/TailscaleGX-backend" ] )
@@ -299,6 +308,29 @@ def mainLoop ():
 		if guiCommand == 'logout':
 			logging.info ("logout command received from UI")
 			doLogout = True	
+		if guiCommand == 'clientUpdate':
+			logging.info ("tailscale client update command received from UI")
+			doClientUpdate = True
+
+	# update tailscale client
+	#	this is done in line because the update does not return until it finishes or times out (~20 seconds)
+	if doClientUpdate:
+		logging.info ("updating tailscale client")
+		doClientUpdate = False
+
+		DbusService['/State'] = CLIENT_UPDATING
+		stdout, _, _ = sendCommand ( [ tsControlCmd, 'update', '--yes' ] ) 
+		if "updated successfully" in stdout:
+			logging.info ("tailscale client updated")
+			DbusService['/State'] = CLIENT_UPDATE_SUCCESS
+			restartBackend = True
+		elif "no update needed" in stdout:
+			logging.info ("tailscale client already up to date")
+			DbusService['/State'] = CLIENT_NO_UPDATE_NEEDED
+		else:
+			logging.warning ("tailscale client update failed")
+			DbusService['/State'] = CLIENT_UPDATE_FAIL
+		time.sleep (5)
 
 	# check if loginServer has changed and is a valiid URL
 	newServer = DbusSettings ['loginServer'].strip() # remove accidental spaces
@@ -361,6 +393,34 @@ def mainLoop ():
 
 	# backend running - get and process status
 	else:
+		# collect current and available versions and compare
+		#	available is set to "" if it is same or older
+		stdout, _, exitCode = sendCommand ( [ tsControlCmd, 'version', '--upstream', '--json=true' ],
+					timeout=0.9 )
+		if exitCode == 0:
+			versionInfo = json.loads (stdout)
+			clientVersion = versionInfo ["short"]
+			availableVersion = versionInfo ["upstream"]
+			parts = clientVersion.split (".")
+			clientVersionNumber = 0
+			if len (parts) > 0:
+				clientVersionNumber = int (parts[0]) * 1000000
+				if len (parts) > 1:
+					clientVersionNumber += int (parts[1]) * 1000
+					if len (parts) > 2:
+						clientVersionNumber += int (parts[2])
+			parts = availableVersion.split (".")
+			availableVersionNumber = 0
+			if len (parts) > 0:
+				availableVersionNumber = int (parts[0]) * 1000000
+				if len (parts) > 1:
+					availableVersionNumber += int (parts[1]) * 1000
+					if len (parts) > 2:
+						availableVersionNumber += int (parts[2])
+
+			if availableVersionNumber <= clientVersionNumber:
+				availableVersion = ""
+
 		stdout, stderr, exitCode = sendCommand ( [ tsControlCmd, 'status', '--peers=false', '--json=true' ],
 					timeout=1.0 )
 		if exitCode == 124:
@@ -386,7 +446,7 @@ def mainLoop ():
 				onLine = True	# assume on-line in case status doesn't include Online info
 				try:
 					# extract values from status report
-					#	default values set above will pervail if unable
+					#	default values set above will prevail if unable
 					# parameters are tried individually to prevent failure of one
 					#	to prevent reading others
 					selfBlock = status["Self"]
@@ -555,6 +615,10 @@ def mainLoop ():
 		DbusService['/HostName'] = ""
 		DbusService['/TailnetName'] = ""
 		DbusService['/KeyExpiry'] = ""
+
+	DbusService['/TailscaleClientVersion'] = clientVersion
+	DbusService['/TailscaleAvailableVersion'] = availableVersion
+
 	# update dbus values regardless of state of the link
 	if uiStateOveride != UNKNOWN_STATE:
 		DbusService['/State'] = uiStateOveride
@@ -645,6 +709,9 @@ def main():
 	DbusService.add_path ( '/KeyExpiry', "" )
 	DbusService.add_path ( '/LoginLink', "" )
 	DbusService.add_path ( '/LoginServerUrl', "" )
+	DbusService.add_path ( '/TailscaleClientVersion', "" )
+	DbusService.add_path ( '/TailscaleAvailableVersion', "" )
+	
 
 	DbusService.add_path ( '/GuiCommand', "", writeable = True )
 

@@ -29,7 +29,7 @@ Victron Energy has tabled a native tailscale implementation due to security conc
 
 TailscaleGX will continue to provide tailscale support for those that understand and accept the security risks.
 
-TailscaleGX configuration is through the Classic UI only).
+TailscaleGX configuration is through the Classic UI only (aka gui-v1).
 No work is planned to support tailscale configuraiton via the New UI(aka gui-v2).
 Although it is also possible to confiture it via a combination of
 the command line (running /data/TailscaleGX/tailscale) and dbus-spy (to turn tailscale on and off).
@@ -92,6 +92,22 @@ press the __Logout__ button. You can then log into a different account.
 
 Optional Authorization key and Alternate server may also be specified.
 These are described in more detail below.
+
+## tailscale update
+
+TailscaleGX includes a stripped down tailscacle binary in order to save space.
+Some functionality is left out however, for example, logging.
+Also, tailscale may receive an update that is not included in the latest TailscaleGX.
+
+The Tailscale menu provides a mechanism to update to the lates FULL binary set
+if one is available.
+
+Note that the stripped down binary is about 35 MB. About 100 MB of free space on the /data partition isneeded
+to update and this may not be available on all platforms. NO CHECKS FOR AVAILABLE SPACE IS NEEDED.
+
+Downloading TailscaleGX will overwrite an update to the FULL, latest version so you would need to reapply it.
+You can also use the download to return to the stripped down version.
+
 
 ## Setup aids
 
@@ -257,8 +273,9 @@ when __Allow remote connections__ is turned off.
 
 # TailscaleGX details
 
-The tailscale included in TailscaleGX is an "extra-small" build of v1.70.
-This build is about 25 MB compared to about 50 MB for the pre-built binairies.
+The tailscale included in TailscaleGX is an "extra-small" build based on
+the latest stable tailscale the last time TailscaleGX was updated.
+This build is about 35 MB compared to about 60 MB for the pre-built binairies.
 
 tailscale runs as a daemon (tailscaled). 
 
@@ -275,3 +292,8 @@ A second service __TailscaleGX-control__:
 - collects login and connection status from tailscale
 - provides this status to the GUI
 - prompts the user for necessary steps to establish a connection
+
+
+
+
+
