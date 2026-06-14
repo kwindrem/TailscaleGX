@@ -1,3 +1,7 @@
+v3.1:
+	fixed: client update to prevent hangs if no network
+	also checks for sufficient space on /data prior to updating
+
 v3.0:
 	add manual update to latest stable version of tailscale client
 	this binary is the full version, not the stripped down version

@@ -147,6 +147,7 @@ NO_BACKEND_STATE = 13
 CLIENT_UPDATING = 21
 CLIENT_NO_UPDATE_NEEDED = 22
 CLIENT_UPDATE_SUCCESS = 23
+CLIENT_UPDATE_NO_SPACE = 28
 CLIENT_UPDATE_FAIL = 29
 
 CONNECTED = 100
@@ -170,6 +171,8 @@ global restartBackend
 global wasIpForwarding
 global endTailscaleControl
 global lastConnectedTime
+global lastClientVersionCheckTime
+global availableVersion
 
 state = INIT
 previousState = INIT
@@ -188,6 +191,8 @@ doClientUpdate = False
 wasIpForwarding = False
 endTailscaleControl = False
 lastConnectedTime = 0
+lastClientVersionCheckTime = 0
+availableVersion = ""
 
 def mainLoop ():
 	global DbusSettings
@@ -209,6 +214,8 @@ def mainLoop ():
 	global endTailscaleControl
 	global mainloop
 	global lastConnectedTime
+	global lastClientVersionCheckTime
+	global availableVersion
 
 	# endTailscaleControl can be set asynchronusly
 	#	allow loop to run one last time from the top
@@ -218,6 +225,7 @@ def mainLoop ():
 	if state == INIT:
 		lastResponseTime = startTime
 		lastConnectedTime = startTime
+		lastClientVersionCheckTime = 0
 
 		restartBackend = False
 		wasIpForwarding = False
@@ -231,7 +239,6 @@ def mainLoop ():
 	keyExpiry = ""
 	tailnetName = ""
 	clientVersion = ""
-	availableVersion = ""
 
 	# see if backend is running
 	stdout, _, _ = sendCommand ( [ 'svstat', "/service/TailscaleGX-backend" ] )
@@ -312,26 +319,6 @@ def mainLoop ():
 			logging.info ("tailscale client update command received from UI")
 			doClientUpdate = True
 
-	# update tailscale client
-	#	this is done in line because the update does not return until it finishes or times out (~20 seconds)
-	if doClientUpdate:
-		logging.info ("updating tailscale client")
-		doClientUpdate = False
-
-		DbusService['/State'] = CLIENT_UPDATING
-		stdout, _, _ = sendCommand ( [ tsControlCmd, 'update', '--yes' ] ) 
-		if "updated successfully" in stdout:
-			logging.info ("tailscale client updated")
-			DbusService['/State'] = CLIENT_UPDATE_SUCCESS
-			restartBackend = True
-		elif "no update needed" in stdout:
-			logging.info ("tailscale client already up to date")
-			DbusService['/State'] = CLIENT_NO_UPDATE_NEEDED
-		else:
-			logging.warning ("tailscale client update failed")
-			DbusService['/State'] = CLIENT_UPDATE_FAIL
-		time.sleep (5)
-
 	# check if loginServer has changed and is a valiid URL
 	newServer = DbusSettings ['loginServer'].strip() # remove accidental spaces
 	if newServer == None:
@@ -393,44 +380,15 @@ def mainLoop ():
 
 	# backend running - get and process status
 	else:
-		# collect current and available versions and compare
-		#	available is set to "" if it is same or older
-		stdout, _, exitCode = sendCommand ( [ tsControlCmd, 'version', '--upstream', '--json=true' ],
-					timeout=0.9 )
-		if exitCode == 0:
-			versionInfo = json.loads (stdout)
-			clientVersion = versionInfo ["short"]
-			availableVersion = versionInfo ["upstream"]
-			parts = clientVersion.split (".")
-			clientVersionNumber = 0
-			if len (parts) > 0:
-				clientVersionNumber = int (parts[0]) * 1000000
-				if len (parts) > 1:
-					clientVersionNumber += int (parts[1]) * 1000
-					if len (parts) > 2:
-						clientVersionNumber += int (parts[2])
-			parts = availableVersion.split (".")
-			availableVersionNumber = 0
-			if len (parts) > 0:
-				availableVersionNumber = int (parts[0]) * 1000000
-				if len (parts) > 1:
-					availableVersionNumber += int (parts[1]) * 1000
-					if len (parts) > 2:
-						availableVersionNumber += int (parts[2])
-
-			if availableVersionNumber <= clientVersionNumber:
-				availableVersion = ""
-
 		stdout, stderr, exitCode = sendCommand ( [ tsControlCmd, 'status', '--peers=false', '--json=true' ],
 					timeout=1.0 )
 		if exitCode == 124:
 			state = STATUS_TIMEOUT
-		elif exitCode > 125:
-			state = WAIT_FOR_RESPONSE
 		elif exitCode == 0:
 			try:
 				status = json.loads (stdout)
 				backendState = status["BackendState"]
+				clientVersion = status["Version"].split ("-") [0]
 			except Exception as ex:
 				logging.error ("Status message json parsing error: ", str (ex.args) )
 				backendState = ""
@@ -596,6 +554,19 @@ def mainLoop ():
 				state = LOGIN_WAIT
 			else:
 				state = CONNECT_WAIT
+
+		# this takes time (~ 0.5 sec with fast network, 5 sec of no network) so only do every minute
+		#	otherwise 1 sec main loop is delayed
+		if startTime > lastClientVersionCheckTime + 60:
+			stdout, _, exitCode = sendCommand ( [ tsControlCmd, 'version', '--upstream', '--json=true' ],
+						timeout=5 )
+			if exitCode == 0:
+				versionInfo = json.loads (stdout)
+				availableVersion = versionInfo ["upstream"]
+			else:
+				availableVersion = ""
+			lastClientVersionCheckTime = startTime
+
 	# end if backendRunning
 
 	# show IP addresses only if connected
@@ -616,9 +587,6 @@ def mainLoop ():
 		DbusService['/TailnetName'] = ""
 		DbusService['/KeyExpiry'] = ""
 
-	DbusService['/TailscaleClientVersion'] = clientVersion
-	DbusService['/TailscaleAvailableVersion'] = availableVersion
-
 	# update dbus values regardless of state of the link
 	if uiStateOveride != UNKNOWN_STATE:
 		DbusService['/State'] = uiStateOveride
@@ -628,6 +596,69 @@ def mainLoop ():
 		DbusService['/State'] = state
 	DbusService['/LoginLink'] = authUrl
 	DbusService['/LoginServerUrl'] = loginServerUrl
+
+	# update current and available client versions for UI
+	#	available is set to "" if it is same or older than current
+	availableVersionNumber = 0
+	try:
+		parts = availableVersion.split (".")
+		availableVersionNumber = int (parts[0]) * 1000000
+		if len (parts) > 1:
+			availableVersionNumber += int (parts[1]) * 1000
+		if len (parts) > 2:
+			availableVersionNumber += int (parts[2])
+	except:
+		availableVersionNumber = 0
+
+	clientVersionNumber = 0
+	try:
+		parts = clientVersion.split (".")
+		clientVersionNumber = int (parts[0]) * 1000000
+		if len (parts) > 1:
+			clientVersionNumber += int (parts[1]) * 1000
+		if len (parts) > 2:
+			clientVersionNumber += int (parts[2])
+	except:
+		clientVersionNumber = 0
+
+	DbusService['/TailscaleClientVersion'] = clientVersion
+
+	if availableVersionNumber > clientVersionNumber:
+		DbusService['/TailscaleAvailableVersion'] = availableVersion
+	else:
+		DbusService['/TailscaleAvailableVersion'] = ""
+		if doClientUpdate:
+			logging.info ("tailscale client update not needed - skipping")
+			doClientUpdate = False
+
+	# update tailscale client
+	#	this is done in line because the update does not return until it finishes (~5 seconds)
+	#	or times out (~20 seconds)
+	if doClientUpdate and backendRunning:
+		logging.info ("updating tailscale client")
+		DbusService['/State'] = CLIENT_UPDATING
+		# make sure there's enough space (> 100 MB) on /data for the update
+		_, _, freeSpace = shutil.disk_usage("/data")
+		if freeSpace < 100 * 10**6:
+				logging.warning ("tailscale client update failed - no space on /data")
+				DbusService['/State'] = CLIENT_UPDATE_NO_SPACE
+				time.sleep (5)
+		else:
+			stdout, _, _ = sendCommand ( [ tsControlCmd, 'update', '--yes' ] ) 
+			if "updated successfully" in stdout:
+				logging.info ("tailscale client updated")
+				DbusService['/State'] = CLIENT_UPDATE_SUCCESS
+				restartBackend = True
+			elif "no update needed" in stdout:
+				logging.info ("tailscale client already up to date")
+				DbusService['/State'] = CLIENT_NO_UPDATE_NEEDED
+				time.sleep (5)
+			else:
+				logging.warning ("tailscale client update failed")
+				DbusService['/State'] = CLIENT_UPDATE_FAIL
+				time.sleep (5)
+		doClientUpdate = False
+
 
 	previousState = state
 	#### DEBUG: enable to measure/display loop time

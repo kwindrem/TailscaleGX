@@ -11,7 +11,7 @@ MbPage
 
 	id: root
 	title: qsTr("Remote access (tailscale) setup")
-	VBusItem { id: stateItem; bind: Utils.path(servicePrefix, "/State") }
+	VBusItem { id: clientStateItem; bind: Utils.path(servicePrefix, "/State") }
 	VBusItem { id: loginItem; bind: Utils.path(servicePrefix, "/LoginLink") }
 	VBusItem { id: ip1Item; bind: Utils.path(servicePrefix, "/Ip1") }
 	VBusItem { id: ip2Item; bind: Utils.path(servicePrefix, "/Ip2") }
@@ -25,7 +25,7 @@ MbPage
 	VBusItem { id: availableVersionItem; bind: Utils.path(servicePrefix, "/TailscaleAvailableVersion") }
 	property string availableVersion: availableVersionItem.valid ? availableVersionItem.value : ""
 
-	property int state: stateItem.valid ? stateItem.value : 0
+	property int clientState: clientStateItem.valid ? clientStateItem.value : 0
 	property string ip1: ip1Item.valid ? ip1Item.value : ""
 	property string ip2: ip2Item.valid ? ip2Item.value : ""
 	property string hostName: hostNameItem.valid ? hostNameItem.value : ""
@@ -33,9 +33,9 @@ MbPage
 	property string keyExpiry: keyExpiryItem.valid ? keyExpiryItem.value : ""
 	property string loginLink: loginItem.valid ? loginItem.value : ""
 	
-	property bool isRunning: stateItem.valid
-	property bool isEnabled: enable.checked
-	property bool isConnected: state == 100 && isEnabled	// CONNECTED
+	property bool isRunning: clientStateItem.valid
+	property bool isEnabled: enable.checked && isRunning
+	property bool isConnected: clientState == 100 && isEnabled	// CONNECTED
 
 	VBusItem { id: authKeyItem; bind: Utils.path(settingsPrefix, "/AuthKey") }
 	property string authKey: authKeyItem.valid ? authKeyItem.value : ""
@@ -62,25 +62,25 @@ MbPage
 			return qsTr ("remote connections not accepted\n(disabled above)")
 		else if ( ! isRunning )
 			return qsTr ("TailscaleGX control not running")
-		else if (state == 12)	// OFF_LINE
+		else if (clientState == 12)	// OFF_LINE
 			return ( qsTr ("tailscale connection off line\ncheck internet connection") )
-		else if ( isConnected )	// state == CONNECTED && isEnabled
+		else if ( isConnected )	// clientState == CONNECTED && isEnabled
 			return ( qsTr ("accepting remote connections at:\n")
 					+ hostName + "\n" + ip1 + "\n" + ip2 + "\n" + getExpiry () )
-		else if ( state == 1 || state == 2)	// BACKEND_STARTING || BACKEND_NOT_RUNNING
+		else if ( clientState == 1 || clientState == 2)	// BACKEND_STARTING || BACKEND_NOT_RUNNING
 			return qsTr ("TailscaleGX starting ...")
-		else if ( state == 3)	// CLIENT_STOPPED
+		else if ( clientState == 3)	// CLIENT_STOPPED
 			return qsTr ("tailscale client stopped")
-		else if ( state == 4)	// LOGGED_OUT
+		else if ( clientState == 4)	// LOGGED_OUT
 			return qsTr ("this GX device is logged out of tailscale")
-		else if ( state == 5 || ( state == 6 ) )	// WAIT_FOR_RESPONSE || CONNECT_WAIT
+		else if ( clientState == 5 || ( clientState == 6 ) )	// WAIT_FOR_RESPONSE || CONNECT_WAIT
 		{
 			if (loginServerUrl == "")
 				return qsTr ("waiting for response from tailscale server")
 			else
 				return qsTr ("waiting for response from login server\n" + loginServerUrl)
 		}
-		else if (state == 9)	// LOGIN_WAIT
+		else if (clientState == 9)	// LOGIN_WAIT
 		{
 			if (loginLink == "")
 			{
@@ -92,11 +92,11 @@ MbPage
 			else
 				return ( qsTr ("connect this GX device to your account at:\n\n") + loginLink)
 		}
-		else if (state == 7 || state == 13)	// STATUS_TIMEOUT || NO_BACKEND_STATE
+		else if (clientState == 7 || clientState == 13)	// STATUS_TIMEOUT || NO_BACKEND_STATE
 			return ( qsTr ("waiting for response from tailscale client") )
-		else if (state == 8)	// CLIENT_STARTING
+		else if (clientState == 8)	// CLIENT_STARTING
 			return ( qsTr ("logging in to server ...") )
-		else if ( state == 201 )	// SERVER_ERROR
+		else if ( clientState == 201 )	// SERVER_ERROR
 		{
 			if (loginServerUrl != "" && authKey != "")
 				return ( qsTr ("tailscale server not responding\ncheck internet connetion\login server URL and auth key") )
@@ -107,37 +107,39 @@ MbPage
 			else
 				return ( qsTr ("tailscale server not responding\ncheck internet connetion"))
 		}
-		else if ( state == 202 )	// CLIENT_ERROR
+		else if ( clientState == 202 )	// CLIENT_ERROR
 			return ( qsTr ("tailscale client can't connect\ncheck internet connection") )
-		else if ( state == 203 )	// CLIENT_TIMEOUT
+		else if ( clientState == 203 )	// CLIENT_TIMEOUT
 			return ( qsTr ("tailscale client not responding") )
-		else if ( state == 204 )	// LOGIN_FAIL
+		else if ( clientState == 204 )	// LOGIN_FAIL
 		{
 			if (loginServerUrl != "")
 				return ( qsTr ("login server timeout\ncheck login server URL\n") + loginServerUrl + qsTr ("\nor internet connection") )
 			else
 				return ( qsTr ("tailscale login server timeout\ncheck internet connection"))
 		}
-		else if ( state == 99 )	// INIT
+		else if ( clientState == 99 )	// INIT
 			return qsTr (" Tailscale control initializing")
-		else if ( state == 10 )	// IN_USE
+		else if ( clientState == 10 )	// IN_USE
 			return ( qsTr ("can not connect\nmay be connected to another tailnet") )
-		else if ( state == 11 )	// MACH_AUTH
+		else if ( clientState == 11 )	// MACH_AUTH
 			return ( qsTr ("needs authorization\nvisit server admin console") )
-		else if ( state == 0 )	// UNKNOWN_STATE
+		else if ( clientState == 0 )	// UNKNOWN_STATE
 			return ""
 
-		else if ( state == 21 )	// CLIENT_UPDATING
+		else if ( clientState == 21 )	// CLIENT_UPDATING
 			return qsTr ("Updating tailscale client ...")
-		else if ( state == 22 )	// CLIENT_NO_UPDATE_NEEDED
+		else if ( clientState == 22 )	// CLIENT_NO_UPDATE_NEEDED
 			return qsTr ("tailscale client already up to date")
-		else if ( state == 23 )	// CLIENT_UPDATE_SUCCESS
+		else if ( clientState == 23 )	// CLIENT_UPDATE_SUCCESS
 			return qsTr ("tailscale client updated")
-		else if ( state == 29 )	// CLIENT_UPDATE_FAIL
+		else if ( clientState == 28 )	// CLIENT_UPDATE_NO_SPACE
+			return qsTr ("tailscale client update FAILED - no space on /data")
+		else if ( clientState == 29 )	// CLIENT_UPDATE_FAIL
 			return qsTr ("tailscale client update FAILED - check network")
 
 		else
-			return ( qsTr ( "unknown state " ) + state )
+			return ( qsTr ( "unknown state " ) + clientState )
 	}
 	
     model: VisibleItemModel
@@ -172,7 +174,7 @@ MbPage
 			value: availableVersion != "" ? qsTr ("Update to " + availableVersion) : qsTr ("no update available")
 			onClicked: commandItem.setValue ('clientUpdate')
 			writeAccessLevel: User.AccessInstaller
-			enabled: availableVersion != ""
+			show: isEnabled && clientVersionItem.value != "" && clientState != 21	// CLIENT_UPDATING
 		}
 		MbSwitch
 		{

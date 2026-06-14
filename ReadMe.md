@@ -97,16 +97,20 @@ These are described in more detail below.
 
 TailscaleGX includes a stripped down tailscacle binary in order to save space.
 Some functionality is left out however, for example, logging.
-Also, tailscale may receive an update that is not included in the latest TailscaleGX.
 
-The Tailscale menu provides a mechanism to update to the lates FULL binary set
-if one is available.
+The stripped-down version is purposely older than the current stable release
+so that an update to the current full version is possible.
 
-Note that the stripped down binary is about 35 MB. About 100 MB of free space on the /data partition isneeded
-to update and this may not be available on all platforms. NO CHECKS FOR AVAILABLE SPACE IS NEEDED.
+The Tailscale menu provides a mechanism to update to the latest FULL binary set
+if one is available to enable missing functionality or to get the latest version.
 
-Downloading TailscaleGX will overwrite an update to the FULL, latest version so you would need to reapply it.
-You can also use the download to return to the stripped down version.
+Note: The update will fail if at least 100 MB is not available on /data.
+
+Downloading TailscaleGX will overwrite an update, restoring tailscale to the version
+included in the package.
+You will need to update again after a download.
+Reinstalling or uninstalling/installing will retain the update however.
+You can also use a download to return to the stripped down version.
 
 
 ## Setup aids
