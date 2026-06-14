@@ -1,3 +1,8 @@
+v3.2:
+	changed tailscale file names and associated sym links
+		this makes it more understandable after upgrading
+		the client to the full version (separate CLI and daemon)
+
 v3.1:
 	fixed: client update to prevent hangs if no network
 	also checks for sufficient space on /data prior to updating

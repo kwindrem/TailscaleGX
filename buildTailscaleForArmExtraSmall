@@ -13,7 +13,7 @@ export GOARCH
 targetDir="/users/Kevin/GitHub/TailscaleGX"
 sourceDir="/users/Kevin/GitHub/tailscale"
 
-targetFile=tailscale.combined
+targetFile=tailscale
 targetPath="$targetDir/$targetFile"
 
 rm -f $targetFile
@@ -23,7 +23,7 @@ cd $sourceDir
 
 cd $targetDir
 
-# create links so executable will run as the control or daemon
-ln -sf ./tailscale.combined tailscale
-ln -sf ./tailscale.combined tailscaled
+# create link so tailscale executable will run as daemon also
+ln -sf ./tailscale tailscaled
+
 

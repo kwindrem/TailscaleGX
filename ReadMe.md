@@ -281,7 +281,12 @@ The tailscale included in TailscaleGX is an "extra-small" build based on
 the latest stable tailscale the last time TailscaleGX was updated.
 This build is about 35 MB compared to about 60 MB for the pre-built binairies.
 
-tailscale runs as a daemon (tailscaled). 
+tailscale runs as both a command (tailscale) and as a daemon (tailscaled).
+For the included build, both are actually the same binary with a sym link for tailscaled
+so the executable can determine wether to run as a CLI or daemon.
+
+If updated to the full build provided by tailscale, tailscale and tailscaled
+are separate binaries. 
 
 In Venus OS, tailscaled is run as a daemontools service: __TailscaleGX-backend__
 
