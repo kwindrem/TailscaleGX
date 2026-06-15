@@ -24,6 +24,7 @@ MbPage
 	VBusItem { id: clientVersionItem; bind: Utils.path(servicePrefix, "/TailscaleClientVersion") }
 	VBusItem { id: availableVersionItem; bind: Utils.path(servicePrefix, "/TailscaleAvailableVersion") }
 	property string availableVersion: availableVersionItem.valid ? availableVersionItem.value : ""
+	VBusItem { id: activeConnectionItem; bind: Utils.path(servicePrefix, "/ActiveConnections") }
 
 	property int clientState: clientStateItem.valid ? clientStateItem.value : 0
 	property string ip1: ip1Item.valid ? ip1Item.value : ""
@@ -47,13 +48,21 @@ MbPage
 	function getExpiry ()
 	{
 		if ( keyExpiry != "" && authKey != "")
-			return ( qsTr ("node key expires: ") + keyExpiry + qsTr ("  auth key expires: ?") )
+			return ( "\n" + qsTr ("node key expires: ") + keyExpiry + qsTr ("  auth key expires: ?") )
 		else if (keyExpiry != "")
-			return ( qsTr ("expires: ") + keyExpiry )
+			return ( "\n" + qsTr ("expires: ") + keyExpiry )
 		else if (authKey != "")
-			return ( qsTr ("  auth key expires: ?") )
+			return ( "\n" + qsTr ("  auth key expires: ?") )
 		else
 			return ( "" )
+	}
+
+	function getActiveConnections ()
+	{
+		if ( ! activeConnectionItem.valid )
+			return ( "\n" + qsTr ("active connections: ?") )
+		else
+			return ( "\n" + qsTr ("active connections: ") + activeConnectionItem.value )
 	}
 	
 	function getState ()
@@ -66,7 +75,8 @@ MbPage
 			return ( qsTr ("tailscale connection off line\ncheck internet connection") )
 		else if ( isConnected )	// clientState == CONNECTED && isEnabled
 			return ( qsTr ("accepting remote connections at:\n")
-					+ hostName + "\n" + ip1 + "\n" + ip2 + "\n" + getExpiry () )
+					+ hostName + "\n" + ip1 + "\n" + ip2
+					+ getActiveConnections () + getExpiry () )
 		else if ( clientState == 1 || clientState == 2)	// BACKEND_STARTING || BACKEND_NOT_RUNNING
 			return qsTr ("TailscaleGX starting ...")
 		else if ( clientState == 3)	// CLIENT_STOPPED
@@ -175,6 +185,14 @@ MbPage
 			onClicked: commandItem.setValue ('clientUpdate')
 			writeAccessLevel: User.AccessInstaller
 			show: isEnabled && clientVersionItem.value != "" && clientState != 21	// CLIENT_UPDATING
+		}
+		MbSwitch
+		{
+			id: clientAutoUpdate
+			name: qsTr("Automatically update tailscale client")
+			bind: Utils.path( settingsPrefix, "/AutoUpdateClient")
+			writeAccessLevel: User.AccessInstaller
+			show: isEnabled
 		}
 		MbSwitch
 		{

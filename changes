@@ -1,3 +1,6 @@
+v3.3:
+	add automatic tailscale client update
+
 v3.2:
 	changed tailscale file names and associated sym links
 		this makes it more understandable after upgrading

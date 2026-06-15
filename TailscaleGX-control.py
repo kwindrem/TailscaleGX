@@ -18,6 +18,8 @@
 #			controls wheter remote access is enabled or disabled
 #		/Settings/TailscaleGX/IpForwarding
 #			controls whether the GX device is set to forward IP traffic to other nodes
+#		/Settings/TailscaleGX/AutoUpdateClient
+#			controls automatic update of tailscale client
 #
 # Operational parameters are provided by:
 #	com.victronenergy.tailscaleGX
@@ -30,7 +32,12 @@
 #		/AuthKey	tailscale authorization key (optional connection mechanism)
 #		/GuiCommand	GUI writes string here to request an action:
 #			logout
-#		/LoginServerUrl	an alternate login server (eg Headscale) ("" if using tailscale's server)
+#			clientUpdate
+#		/LoginServerUrl				an alternate login server (eg Headscale) ("" if using tailscale's server)
+#		/KeyExpiry					time/date when auth key will expire ("" if none)
+#		/TailscaleAvailableVersion	version of an available client update ("" if none)
+#		/TailscaleClientVersion		version of the current tailscale client (specifically the daemon)
+#		/ActiveConnections			number of active tailscale connections to this client
 #
 # together, the above settings and dbus service provide the condiut to the GUI
 #
@@ -239,6 +246,8 @@ def mainLoop ():
 	keyExpiry = ""
 	tailnetName = ""
 	clientVersion = ""
+	autoUpdateClientOk = False
+	activeConnections = None
 
 	# see if backend is running
 	stdout, _, _ = sendCommand ( [ 'svstat', "/service/TailscaleGX-backend" ] )
@@ -380,7 +389,7 @@ def mainLoop ():
 
 	# backend running - get and process status
 	else:
-		stdout, stderr, exitCode = sendCommand ( [ tsControlCmd, 'status', '--peers=false', '--json=true' ],
+		stdout, stderr, exitCode = sendCommand ( [ tsControlCmd, 'status', '--active=true', '--json=true' ], 
 					timeout=1.0 )
 		if exitCode == 124:
 			state = STATUS_TIMEOUT
@@ -389,6 +398,11 @@ def mainLoop ():
 				status = json.loads (stdout)
 				backendState = status["BackendState"]
 				clientVersion = status["Version"].split ("-") [0]
+				peers = status ["Peer"]
+				if peers != None:
+					activeConnections = len ( peers )
+					if activeConnections == 0:
+						autoUpdateClientOk = True
 			except Exception as ex:
 				logging.error ("Status message json parsing error: ", str (ex.args) )
 				backendState = ""
@@ -580,12 +594,14 @@ def mainLoop ():
 		DbusService['/HostName'] = thisHostName
 		DbusService['/TailnetName'] = tailnetName
 		DbusService['/KeyExpiry'] = keyExpiry.split ("T")[0]
+		DbusService['/ActiveConnections'] = activeConnections
 	else:
 		DbusService['/Ip1'] = ""
 		DbusService['/Ip2'] = ""
 		DbusService['/HostName'] = ""
 		DbusService['/TailnetName'] = ""
 		DbusService['/KeyExpiry'] = ""
+		DbusService['/ActiveConnections'] = None
 
 	# update dbus values regardless of state of the link
 	if uiStateOveride != UNKNOWN_STATE:
@@ -623,8 +639,13 @@ def mainLoop ():
 
 	DbusService['/TailscaleClientVersion'] = clientVersion
 
-	if availableVersionNumber > clientVersionNumber:
+	if backendRunning and availableVersionNumber > clientVersionNumber:
 		DbusService['/TailscaleAvailableVersion'] = availableVersion
+
+		# check for automatic client updates
+		if not doClientUpdate and autoUpdateClientOk and DbusSettings['autoUpdateClient'] == 1 :
+			logging.info ("automatic tailscale client update triggered")
+			doClientUpdate = True
 	else:
 		DbusService['/TailscaleAvailableVersion'] = ""
 		if doClientUpdate:
@@ -634,7 +655,7 @@ def mainLoop ():
 	# update tailscale client
 	#	this is done in line because the update does not return until it finishes (~5 seconds)
 	#	or times out (~20 seconds)
-	if doClientUpdate and backendRunning:
+	if doClientUpdate:
 		logging.info ("updating tailscale client")
 		DbusService['/State'] = CLIENT_UPDATING
 		# make sure there's enough space (> 100 MB) on /data for the update
@@ -642,6 +663,9 @@ def mainLoop ():
 		if freeSpace < 100 * 10**6:
 				logging.warning ("tailscale client update failed - no space on /data")
 				DbusService['/State'] = CLIENT_UPDATE_NO_SPACE
+				if DbusSettings['autoUpdateClient'] == 1:
+					logging.warning ("disabling automatic client updates")
+					DbusSettings['autoUpdateClient'] = 0
 				time.sleep (5)
 		else:
 			stdout, _, _ = sendCommand ( [ tsControlCmd, 'update', '--yes' ] ) 
@@ -716,6 +740,7 @@ def main():
 					  'customArguements': [ '/Settings/Services/Tailscale/CustomArguments', "", 0, 0 ],
 					  'authKey' :  [ '/Settings/Services/Tailscale/AuthKey', "", 0, 0 ],
 					  'loginServer': [ '/Settings/Services/Tailscale/LoginServer', "", 0, 0 ],
+					  'autoUpdateClient': [ '/Settings/Services/Tailscale/AutoUpdateClient', 0, 0, 1 ],
 					}
 	DbusSettings = SettingsDevice(bus=theBus, supportedSettings=settingsList,
 					timeout = 30, eventCallback=None )
@@ -742,6 +767,7 @@ def main():
 	DbusService.add_path ( '/LoginServerUrl', "" )
 	DbusService.add_path ( '/TailscaleClientVersion', "" )
 	DbusService.add_path ( '/TailscaleAvailableVersion', "" )
+	DbusService.add_path ( '/ActiveConnections', 0, 0, 0 )
 	
 
 	DbusService.add_path ( '/GuiCommand', "", writeable = True )

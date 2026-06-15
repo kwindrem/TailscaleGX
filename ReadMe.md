@@ -101,10 +101,18 @@ Some functionality is left out however, for example, logging.
 The stripped-down version is purposely older than the current stable release
 so that an update to the current full version is possible.
 
-The Tailscale menu provides a mechanism to update to the latest FULL binary set
+The Tailscale menu provides a mechanism to manually update to the latest FULL binary set
 if one is available to enable missing functionality or to get the latest version.
 
+The Tailscale menu also provides for automatic client updates.
+If enabled, an automatic client update will occur when a new stable version is released.
+
+If any client connections are active, the update is blocked in order to prevent
+interrupting the connection. 
+It may take as much as a minute after the last conneciton is closed to begin an update.
+
 Note: The update will fail if at least 100 MB is not available on /data.
+Automatic client updates are disabled if this happens to prevent future attempts.
 
 Downloading TailscaleGX will overwrite an update, restoring tailscale to the version
 included in the package.
