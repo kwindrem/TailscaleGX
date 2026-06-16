@@ -93,13 +93,10 @@ press the __Logout__ button. You can then log into a different account.
 Optional Authorization key and Alternate server may also be specified.
 These are described in more detail below.
 
-## tailscale update
+## Updating tailscale client
 
 TailscaleGX includes a stripped down tailscacle binary in order to save space.
-Some functionality is left out however, for example, logging.
-
-The stripped-down version is purposely older than the current stable release
-so that an update to the current full version is possible.
+Some functionality, for example, logging is left out however.
 
 The Tailscale menu provides a mechanism to manually update to the latest FULL binary set
 if one is available to enable missing functionality or to get the latest version.
@@ -107,12 +104,21 @@ if one is available to enable missing functionality or to get the latest version
 The Tailscale menu also provides for automatic client updates.
 If enabled, an automatic client update will occur when a new stable version is released.
 
-If any client connections are active, the update is blocked in order to prevent
-interrupting the connection. 
+If any connections to remote clients are active, the automatic update is prevented in order to avoid
+interrupting the connection.
 It may take as much as a minute after the last conneciton is closed to begin an update.
+The status message indicates when an automatic update is prevented by active connections,
 
-Note: The update will fail if at least 100 MB is not available on /data.
+The update will only be attempted if at least 100 MB is available on /data
+in order to avoid problems related to a full partition.
+The strpped down tailscale version uses about 35 MB on /data, the full version is about 62 MB.
+The update process needs aboutn another 33 MB which is reclaimed after the update.
 Automatic client updates are disabled if this happens to prevent future attempts.
+
+Platforms like CCGX with limited storage may not have sufficient space for a tailscale update.
+
+The stripped-down version is purposely older than the current stable release
+so that an update to the current full version is possible.
 
 Downloading TailscaleGX will overwrite an update, restoring tailscale to the version
 included in the package.

@@ -1,3 +1,6 @@
+v3.4:
+	add indication that a tailscale auto update is prevented when connections are active
+
 v3.3:
 	add automatic tailscale client update
 

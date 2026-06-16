@@ -60,9 +60,11 @@ MbPage
 	function getActiveConnections ()
 	{
 		if ( ! activeConnectionItem.valid )
-			return ( "\n" + qsTr ("active connections: ?") )
+			return ( "\n" + qsTr ("? connections") )
+		else if ( activeConnectionItem.value > 0 && clientAutoUpdate.checked  && availableVersion != "" )
+			return ( "\n" + activeConnectionItem.value + qsTr (" connections -- preventing auto update") )
 		else
-			return ( "\n" + qsTr ("active connections: ") + activeConnectionItem.value )
+			return ( "\n" + activeConnectionItem.value + qsTr (" connections") )
 	}
 	
 	function getState ()
