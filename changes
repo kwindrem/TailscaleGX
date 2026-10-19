@@ -1,3 +1,8 @@
+v3.5:
+	increase link down timeouts to accommodate slower links
+	restart backend if ip link indicates down (not reflected in tailscale status)
+	update included tailscale to v1.102
+
 v3.4:
 	add indication that a tailscale auto update is prevented when connections are active
 

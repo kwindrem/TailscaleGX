@@ -180,6 +180,7 @@ global endTailscaleControl
 global lastConnectedTime
 global lastClientVersionCheckTime
 global availableVersion
+global lastIpLinkUpTime
 
 state = INIT
 previousState = INIT
@@ -200,6 +201,7 @@ endTailscaleControl = False
 lastConnectedTime = 0
 lastClientVersionCheckTime = 0
 availableVersion = ""
+lastIpLinkUpTime = 0
 
 def mainLoop ():
 	global DbusSettings
@@ -223,6 +225,7 @@ def mainLoop ():
 	global lastConnectedTime
 	global lastClientVersionCheckTime
 	global availableVersion
+	global lastIpLinkUpTime
 
 	# endTailscaleControl can be set asynchronusly
 	#	allow loop to run one last time from the top
@@ -232,6 +235,7 @@ def mainLoop ():
 	if state == INIT:
 		lastResponseTime = startTime
 		lastConnectedTime = startTime
+		lastIpLinkUpTime = startTime
 		lastClientVersionCheckTime = 0
 
 		restartBackend = False
@@ -478,23 +482,23 @@ def mainLoop ():
 		if state == STATUS_TIMEOUT:
 			if timeSinceResponse > 5:
 				uiStateOveride = CLIENT_TIMEOUT
-			if timeSinceResponse > 30:
+			if timeSinceResponse > 60:
 				restartBackend = True
 				logging.error ("timeout waiting for response from client")
-		if state == NO_BACKEND_STATE:
+		elif state == NO_BACKEND_STATE:
 			if timeSinceResponse > 5:
 				uiStateOveride = CLIENT_ERROR
-			if timeSinceResponse > 30:
+			if timeSinceResponse > 60:
 				restartBackend = True
 				logging.error ("timeout waiting for client state")
 		elif state == CLIENT_STARTING:
-			if timeSinceResponse > 30:
+			if timeSinceResponse > 60:
 				restartBackend = True
 				logging.error ("timeout waiting for client to start")
 		elif state == WAIT_FOR_RESPONSE:
 			if timeSinceResponse > 5:
 				uiStateOveride = SERVER_ERROR
-			if timeSinceResponse > 30:
+			if timeSinceResponse > 60:
 				resetConnection = True
 				if loginServerUrl != "" and authKey != "":
 					logging.error ("timeout waiting for response from tailscale login server - check URL and auth key")
@@ -507,7 +511,7 @@ def mainLoop ():
 		elif state == LOGIN_WAIT and authUrl =="":
 			if timeSinceResponse > 5:
 				uiStateOveride = LOGIN_FAIL
-			if timeSinceResponse > 30:
+			if timeSinceResponse > 60:
 				restartBackend = True
 				if loginServerUrl != "":
 					logging.error ("timeout waiting for response from " + loginServerUrl )
@@ -516,9 +520,26 @@ def mainLoop ():
 		elif state == OFF_LINE:
 			if (previousState != OFF_LINE):
 				logging.info ("connection off-line" )
-			if timeSinceResponse > 20:
+			if timeSinceResponse > 60:
 				logging.error ("timeout waiting for on-line")
 				restartBackend = True
+		
+		# check state of IP link since this is not reflected in tailscale status
+		if state == CONNECTED or state == WAIT_FOR_RESPONSE or state == LOGIN_WAIT:
+			try:
+				with open ("/sys/class/net/tailscale0/flags", "r") as file:
+					for line in file:
+						if ( int (line, 16) & 1 ):
+							lastIpLinkUpTime = startTime
+			except:
+				pass
+			# restart backend if IP link appears down for 15 seconds
+			if startTime - lastIpLinkUpTime > 15:
+				logging.error ("IP link is down - restarting tailscale")
+				uiStateOveride = CLIENT_TIMEOUT
+				restartBackend = True
+		else:
+			lastIpLinkUpTime = startTime
 
 		# bring connection up or shut it down
 		#	will fully connect if login had previously succeeded
